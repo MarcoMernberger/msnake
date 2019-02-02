@@ -10,7 +10,7 @@ import packaging.version
 
 
 def main():
-    with open("project.install") as op:
+    with open("project.setup") as op:
         req_str = op.read()
     parsed = parse_requirements(req_str)
     pprint.pprint(parsed)
@@ -24,9 +24,9 @@ def main():
         docker_image = parsed["docker_image"]["version"]
         del parsed["docker_image"]
     else:
-        docker_image = None
+        docker_image = 'mbf_dockerator:18.04'
     if "bioconductor" in parsed:
-        bioconductor_version = parsed["bioconductor_version"]["version"]
+        bioconductor_version = parsed["bioconductor"]["version"]
         del parsed["bioconductor"]
     else:
         bioconductor_version = None
@@ -36,10 +36,22 @@ def main():
     else:
         R_version = None
 
-    if not docker_image:
-        raise ValueError(
-            "Must specify docker image to use, e.g. docker_image==ubuntu:18.04"
-        )
+    if 'storage_path' in parsed:
+        storage_path = Path(parsed['storage_path']['version'])
+        del parsed['storage_path']
+    else:
+        storage_path = Path("version_store")
+    if not storage_path.exists():
+        storage_path.mkdir(exist_ok=True)
+
+    if 'code_path' in parsed:
+        code_path = Path(parsed['code_path']['version'])
+        del parsed['code_path']
+    else:
+        code_path = Path("code")
+    if not code_path.exists():
+        code_path.mkdir(exist_ok=True)
+
     Path("logs").mkdir(parents=False, exist_ok=True)
     d = Dockerator(
         docker_image,
@@ -52,8 +64,9 @@ jupyter
 """
         ),
         parsed,
-        Path("version_store"),
-        Path("local_venv"),
+        storage_path,
+        code_path,
+        
     )
     d.ensure()
 
@@ -81,22 +94,41 @@ class Dockerator:
         global_venv_packages,
         local_venv_packages,
         storage_path,
-        local_venv_path,
+        code_path,
+        cores = 8,
+        cran_mirror = "https://ftp.fau.de/cran/", # https://cloud.r-project.org
     ):
+        self.cores = int(cores)
+        self.cran_mirror = cran_mirror
 
         self.storage_path = Path(storage_path)
         if not self.storage_path.exists():
             raise IOError(f"{self.storage_path} did not exist")
-        self.storage_path = storage_path / docker_image.replace(":", "-")
-        self.local_venv_path = Path(local_venv_path)
-        self.local_venv_path.mkdir(parents=False, exist_ok=True)
+        storage_path = storage_path / docker_image.replace(":", "-")
+        code_path = Path(code_path)
+        code_path.mkdir(parents=False, exist_ok=True)
+
+        
+
         self.docker_image = docker_image
         self.python_version = python_version
         self.bioconductor_version = bioconductor_version
+        self.paths = {
+                'log': Path('logs'),
+                }
+
         if self.bioconductor_version:
-            if r_version:
-                raise ValueError("Must not specify both R and bioconductor version")
-            self.R_version = self.find_r_from_bioconductor(bioconductor_version)
+            self.paths.update({
+                'storage_bioconductor': storage_path / 'bioconductor' / self.bioconductor_version,
+                'storage_bioconductor_r_version': storage_path / 'bioconductor_r_version' / self.bioconductor_version,
+                'docker_storage_bioconductor': '/dockerator/bioconductor',
+                'log_bioconductor': self.paths['log'] / 'dockerator.bioconductor.log',
+            })
+       
+            if not r_version:
+                self.R_version = self.find_r_from_bioconductor()
+            else:
+                self.R_version = r_version
         else:
             self.R_version = r_version
         self.global_venv_packages = global_venv_packages
@@ -104,6 +136,36 @@ class Dockerator:
 
         if self.R_version is not None and self.R_version < "3.0":
             raise ValueError("Requested an R version that is not rpy2 compatible")
+        self.paths.update({
+                'storage': storage_path,
+                'code': code_path / self.python_version,
+                'code_venv': code_path / self.python_version / 'venv',
+                'storage_venv': storage_path / 'venv' / self.python_version,
+                'storage_python': storage_path / 'python' / self.python_version,
+                'docker_storage_venv': '/dockerator/venv',
+                'docker_storage_python': '/dockerator/python',
+                'docker_code': '/dockerator/code',
+                'docker_code_venv': '/dockerator/venv',
+
+                'log_python': self.paths['log'] / 'dockerator.python.log',
+                'log_storage_venv': self.paths['log'] / 'dockerator.storage_venv.log',
+                'log_storage_venv_pip': self.paths['log'] / 'dockerator.storage_venv_pip.log',
+                'log_code_venv': self.paths['log'] / 'dockerator.code_venv.log',
+                'log_code_venv_pip': self.paths['log'] / 'dockerator.code_venv_pip.log',
+                })
+        if self.R_version is not None:
+            self.paths.update({
+                'storage_r': storage_path / 'R' / self.R_version,
+                'storage_rpy2': storage_path / 'rpy2' / f"{self.python_version}_{self.R_version}",
+                'docker_storage_r': '/dockerator/R',
+                'docker_storage_rpy2': '/dockerator/rpy2',
+                'log_r': self.paths['log'] / 'dockerator.R.log',
+                'log_rpy2': self.paths['log'] / 'dockerator.rpy2.log',
+                })
+         
+        for k, v in self.paths.items():
+            self.paths[k] = Path(v)
+
 
     @property
     def major_python_version(self):
@@ -115,6 +177,15 @@ class Dockerator:
         else:
             raise ValueError(f"Error parsing {self.python_version} to major version")
 
+    def check_r_version_exists(self):
+        if not re.match(r'\d+\.\d+\.\d', self.R_version):
+            raise ValueError("Incomplete R version specified - bust look like e.g 3.5.3")
+        url = self.cran_mirror + 'src/base/R-' + self.R_version[0]
+        r = requests.get(url).text
+        if not f'R-{self.R_version}.tar.gz' in r:
+            raise ValueError(f("Unknown R version {self.R_version - check {url} for list"))
+
+
     def check_python_version_exists(self):
         version = self.python_version
         r = requests.get("https://www.python.org/doc/versions/").text
@@ -122,6 +193,13 @@ class Dockerator:
             raise ValueError(
                 f"Unknown python version {version} - check https://www.python.org/doc/versions/"
             )
+
+    def check_r_bioconductor_match(self):
+        pairs = self.get_bioconductor_r_pairs()
+        major = pairs[self.bioconductor_version]
+        if not self.R_version.startswith(major):
+            raise ValueError(f"bioconductor {self.bioconductor_version} requires R {major}.*, but you requested {self.R_version}")
+
 
     def ensure(self):
         self.ensure_python()
@@ -139,43 +217,44 @@ class Dockerator:
     def run(self, bash_cmds):
         pass
 
-    def find_r_from_bioconductor(self):
-        # straight copy paste https://bioconductor.org/about/release-announcements/
-        raw = """
-3.7, 3.8	3.5
-3.5, 3.6	3.4
-3.3, 3.4	3.3
-3.1, 3.2	3.2
-2.14, 3.0	3.1
-2.12, 2.13	3.0
-2.10, 2.11	2.15
-2.9	2.14
-2.8	2.13
-2.7	2.12
-2.6	2.11
-2.5	2.10
-2.4	2.9
-2.3	2.8
-2.2	2.7
-2.1	2.6
-2.0	2.5
-1.9	2.4
-1.8	2.3
-1.7	2.2
-1.6	2.1
-1.5	2.0
-1.4	1.9
-1.3	1.8
-1.2	1.7
-1.1	1.6
-1.0	1.5"""
-        lines = [x.split("\t") for x in raw.split("\n")]
-        result = {}
-        for bc_versions, r_version in lines:
-            for bc_version in bc_versions.split(", "):
-                result[bc_version] = r_version
-        return result["https://bioconductor.org/about/release-announcements/"]
+    def get_bioconductor_r_pairs(self):
+        pairs = {}
+        url = 'https://bioconductor.org/about/release-announcements/'
+        bc = requests.get(url).text
+        tbody = bc[bc.find("<tbody>"):bc.find("</tbody>")] # at least for now it's the first table on the page
+        for block in tbody.split("</tr>"):
+            bc_versions = re.findall(r"/packages/(\d+.\d+)/", block)
+            if bc_versions:
+                r_version = re.findall(r">(\d+\.\d+)</td>", block)
+                if len(r_version) != 1:
+                    raise ValueError("Failed to parse bioconductor -> R listing from website, check screen scrapping code")
+                r_version = r_version[0]
+                for b in bc_versions:
+                    pairs[b] = r_version
+        return pairs
 
+    def find_r_from_bioconductor(self):
+        cache_file =(self.paths['storage_bioconductor_r_version']) 
+        if not cache_file.exists():
+            cache_file.parent.mkdir(exist_ok=True, parents=True)
+            pairs = self.get_bioconductor_r_pairs()
+            if not self.bioconductor_version in pairs:
+                raise ValueError(f"Could not find bioconductor {version} - check {url}")
+            major = pairs[self.bioconductor_version]
+            # chosen = major + '.0'
+            if True:
+                # this is very nice, but simply wrong - 3.8 does not work with R 3.5.2 e.g.
+                #now we now 3.x - but we don't know 3.x.y
+                url = self.cran_mirror + 'src/base/R-' + major[0]
+                r = requests.get(url).text
+                available = re.findall("R-(" + major + r"\.\d+).tar.gz", r)
+                matching = [x for x in available if x.startswith(major)]
+                by_minor = [(re.findall(r"\d+.\d+.(\d+)", x), x) for x in matching]
+                by_minor.sort()
+                chosen = by_minor[-1][1]
+            cache_file.write_text(chosen)
+        return cache_file.read_text()
+        
     def _run_docker(self, docker_image, bash_script, run_kwargs, log_name):
         run_kwargs["stdout"] = True
         run_kwargs["stderr"] = True
@@ -186,19 +265,18 @@ class Dockerator:
         volume_args = {}
         for k, v in volumes.items():
             k = str(Path(k).absolute())
-            if isinstance(v, dict):
-                volume_args[k] = v
+            if isinstance(v, tuple):
+                volume_args[k] = {"bind": str(v[0]), "mode": v[1]}
             else:
-                volume_args[k] = {"bind": v, "mode": "rw"}
+                volume_args[k] = {"bind": str(v), "mode": "rw"}
         run_kwargs["volumes"] = volume_args
-        pprint.pprint(volume_args)
         tf.write(bash_script)
         tf.flush()
         container_result = client.containers.run(
             docker_image, "/bin/bash /opt/run.sh", **run_kwargs
         )
         if Path("logs").exists():
-            (Path("logs") / (log_name + ".stdouterr")).write_bytes(container_result)
+            self.paths[log_name].write_bytes(container_result)
         return container_result
 
     def build(
@@ -238,7 +316,7 @@ class Dockerator:
                 else:
                     print("container stdout/stderr", container_result)
                 raise ValueError(
-                    f"Docker build failed. Investigate logs/{log_name}.stdout/stderr"
+                    "Docker build failed. Investigate " + str(self.paths[log_name])
                 )
             else:
                 # un-atomic copy (across device borders!), atomic rename -> safe
@@ -260,10 +338,10 @@ class Dockerator:
             ssl_lib = "libssl1.0-dev"
 
         self.build(
-            target_dir=self.storage_path / "python" / self.python_version,
-            target_dir_inside_docker="/opt/python",
+            target_dir=self.paths['storage_python'],
+            target_dir_inside_docker=self.paths['docker_storage_python'],
             relative_check_filename="bin/virtualenv",
-            log_name="dockerator.python_build",
+            log_name="log_python",
             additional_volumes={},
             version_check=self.check_python_version_exists(),
             build_cmds=f"""
@@ -279,9 +357,9 @@ apt-get install -y {ssl_lib} zlib1g-dev\
  libncurses5-dev  tk-dev libxml2-dev libxmlsec1-dev\
  libffi-dev liblzma-dev
 
-python-build %s /opt/python
-/opt/python/bin/pip install -U pip virtualenv
-chown 1001 /opt/python -R 2>/dev/null
+python-build %s {self.paths['docker_storage_python']}
+{self.paths['docker_storage_python']}/bin/pip install -U pip virtualenv
+chown 1001 {self.paths['docker_storage_python']} -R 2>/dev/null
 echo "done"
 """
             % self.python_version,
@@ -289,33 +367,32 @@ echo "done"
 
     def ensure_global_venv(self):
         self.build(
-            target_dir=self.storage_path / "global_venv" / self.python_version,
-            target_dir_inside_docker="/opt/global_venv",
+            target_dir=self.paths['storage_venv'],
+            target_dir_inside_docker=self.paths['docker_storage_venv'],
             relative_check_filename=Path("bin") / "activate.fish",
-            log_name="dockerator.global_venv",
+            log_name="log_storage_venv",
             additional_volumes={
-                self.storage_path / "python" / self.python_version: "/opt/python"
+                self.paths['storage_python']: (self.paths['docker_storage_python'], 'ro')
             },
-            build_cmds="""
-/opt/python/bin/virtualenv -p /opt/python/bin/python /opt/global_venv
-chown 1001 /opt/global_venv -R 2>/dev/null
+            build_cmds=f"""
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_storage_venv']}
+chown 1001 {self.paths['docker_storage_venv']} -R 2>/dev/null
 echo "done"
 """,
         )
 
     def ensure_local_venv(self):
         self.build(
-            target_dir=self.local_venv_path / self.python_version / "venv",
-            target_dir_inside_docker="/opt/local_venv",
+            target_dir=self.paths['code_venv'],
+            target_dir_inside_docker=self.paths['docker_code_venv'],
             relative_check_filename=Path("bin") / "activate.fish",
-            log_name="dockerator.local_venv",
+            log_name="log_code_venv",
             additional_volumes={
-                self.storage_path / "python" / self.python_version: "/opt/python",
-                # self.storage_path / "global_venv" / self.python_version: '/opt/global_venv,
+                self.paths['storage_python']: (self.paths['docker_storage_python'], 'ro')
             },
-            build_cmds="""
-/opt/python/bin/virtualenv -p /opt/python/bin/python /opt/local_venv
-chown 1001 /opt/local_venv -R 2>/dev/null
+            build_cmds=f"""
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_code_venv']}
+chown 1001 {self.paths['docker_code_venv']} -R 2>/dev/null
 echo "done"
 """,
         )
@@ -323,33 +400,31 @@ echo "done"
 
     def ensure_r(self):
         #todo: switch to cdn by default / config in file
-        r_mirror = "https://ftp.fau.de/cran/src/base/"
         r_url = (
-            r_mirror + "R-" + self.R_version[0] + "/R-" + self.R_version + "tar.gz"
+            self.cran_mirror + "src/base/R-" + self.R_version[0] + "/R-" + self.R_version + ".tar.gz"
         )
         self.build(
-            target_dir=self.storage_path / "R" / self.R_version,
-            target_dir_inside_docker="/opt/R",
+            target_dir=self.paths['storage_r'],
+            target_dir_inside_docker=self.paths['docker_storage_r'],
             relative_check_filename="bin/R",
-            log_name="dockerator.R",
+            log_name="log_r",
             additional_volumes={},
+            version_check=self.check_r_version_exists(),
             build_cmds=f"""
-apt-get update
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y tzdata
 
 apt-get install -y libopenblas-dev libcurl4-openssl-dev
-apt-get build-dep r-base
+apt-get build-dep -y r-base
 
 cd /root
 wget {r_url} -O R.tar.gz
 tar xf R.tar.gz
 cd R-{self.R_version}
-./configure --prefix=/opt/R --enable-R-shlib --with-blas --with-lapack --with-x=no
-make
+./configure --prefix={self.paths['docker_storage_r']} --enable-R-shlib --with-blas --with-lapack --with-x=no
+make -j {self.cores}
 make install
 
-chown 1001 /opt/R -R
+chown 1001 {self.paths['docker_storage_r']} -R
 echo "done"
 """,
         )
@@ -358,34 +433,36 @@ echo "done"
         # TODO: This will probably need fine tuning for combining older Rs and the
         # latest rpy2 version that supported them
         self.build(
-            target_dir=self.storage_path
-            / "rpy2"
-            / f"{self.python_version}_{self.R_version}",
-            target_dir_inside_docker="/opt/rpy2_venv",
-            relative_check_filename=do_not_know_yet,
-            log_name="dockerator.rpy2",
+            target_dir=self.paths['storage_rpy2']
+            ,
+            target_dir_inside_docker=self.paths['docker_storage_rpy2'],
+            relative_check_filename=f"lib/python{self.major_python_version}/site-packages/rpy2/__init__.py",
+            log_name="log_rpy2",
             additional_volumes={
-                self.storage_path / "python" / self.python_version: "/opt/python",
-                self.storage_path / "R" / self.R_version: "/opt/R",
+                self.paths['storage_python']: (self.paths['docker_storage_python'], 'ro'),
+                self.paths['storage_r']: (self.paths['docker_storage_r'], 'ro')
             },
-            build_cmds="""
-export R_HOME=/opt/R
-export PATH=/opt/R/bin:$PATH 
-/opt/python/bin/virtualenv -p /opt/python/bin/python /opt/rpy2_venv
+            build_cmds=f"""
+apt-get install -y libopenblas-dev libcurl4-openssl-dev
+apt-get build-dep -y r-base
+
+export R_HOME={self.paths['docker_storage_r']}
+export PATH={self.paths['docker_storage_r']}/bin:$PATH 
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_storage_rpy2']}
 cd /root
-/opt/rpy2_venv/bin/pip3 download rpy2
+{self.paths['docker_storage_rpy2']}/bin/pip3 download rpy2
 #this might not be enough later on, if rpy2 gains a version that is 
 # dependend on something we don't get as a wheel
-/opt/rpy2_venv/bin/pip3 install *.whl
+{self.paths['docker_storage_rpy2']}/bin/pip3 install *.whl
 tar xf rpy2-*.tar.gz
 rm rpy2-*.tar.gz
 mv rpy2* rpy2
 cd rpy2
 python setup.py install
 
-/opt/rpy2_venv/bin/pip install rpy2
-touch /opt/rpy2_venv/done
-chown 1001 /opt/rpy2_venv -R
+{self.paths['docker_storage_rpy2']}/bin/pip install rpy2
+touch {self.paths['docker_storage_rpy2']}/done
+chown 1001 {self.paths['docker_storage_rpy2']} -R
 echo "done"
 """,
         )
@@ -402,61 +479,43 @@ echo "done"
         package_vector = "c(" + ", ".join([f'"{x}"' for x in packages]) + ")"
         r_build_script = f"""
 r <- getOption("repos")
-r["CRAN"] <- "https://cloud.r-project.org"
+r["CRAN"] <- "{self.cran_mirror}"
 options(repos=r)
 
-lib = "/opt/bioconductor"
+lib = "{self.paths['docker_storage_bioconductor']}"
 .libPaths(c(lib, .libPaths()))
 if (!requireNamespace("BiocManager"))
     install.packages("BiocManager", lib=lib)
-BiocManager::install({package_vector}, lib=lib)
-write("done", "/opt/bioconductor/done")
+BiocManager::install({package_vector}, lib=lib, Ncpus={self.cores})
+write("done", "{self.paths['docker_storage_bioconductor']}/done")
 echo "done"
 """
-        r_build_file = tempfile.NamedTemporaryFile(suffix=".r")
+        r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode='w')
         r_build_file.write(r_build_script)
         r_build_file.flush()
 
         self.build(
-            target_dir=self.storage_path / "bioconductor" / self.bioconductor_version,
-            target_dir_inside_docker="/opt/bioconductor",
+            target_dir=self.paths['storage_bioconductor'],
+            target_dir_inside_docker=self.paths['docker_storage_bioconductor'],
             relative_check_filename="done",
-            log_name="dockerator.bioconductor",
+            log_name="log_bioconductor",
+            version_check=self.check_r_bioconductor_match(),
             additional_volumes={
-                self.storage_path / "R" / self.R_version: "/opt/R",
-                r_build_file.name: "/opt/bioconductor/install.R",
+                self.paths['storage_r']: (self.paths['docker_storage_r'], 'ro'),
+                r_build_file.name: "/opt/install.R",
             },
-            build_cmds="""
-apt-get update
+            build_cmds=f"""
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y tzdata
 
-apt-get install -y adduser apt base-files base-passwd bash bsdutils\
- build-essential bzip2\
- ca-certificates coreutils dash debconf debianutils diffutils dpkg e2fsprogs \
- fdisk findutils gcc-8-base gfortran gpgv grep gzip hostname init-system-helpers\
- libacl1 libapt-pkg5.0 libattr1 libaudit-common libaudit1 libblkid1\
- libbz2-1.0 libc-bin libc6 libcap-ng0 libcom-err2 libcurl4-openssl-dev libdb5.3\
- libdebconfclient0 libext2fs2 libfdisk1 libffi6 libgcc1 libgcrypt20 libgmp10\
- libgnutls30 libgpg-error0 libhogweed4 libidn2-0 liblz4-1 liblzma5 libmount1\
- libncurses5 libncursesw5 libnettle6 libopenblas-dev libp11-kit0 libpam-modules\
- libpam-modules-bin libpam-runtime libpam0g libpcre3 libprocps6 libseccomp2\
- libselinux1 libsemanage-common libsemanage1 libsepol1 libsmartcols1 libss2\
- libstdc++6 libsystemd0 libtasn1-6 libtinfo5 libudev1 libunistring2 libuuid1\
- libzstd1 login lsb-base mawk mount ncurses-base ncurses-bin openjdk-8-jdk\
- openjdk-8-jre passwd perl-base procps sed sensible-utils\
- sysvinit-utils tar ubuntu-keyring util-linux vim wget zlib1g
-apt-get build-dep r-base
-
-/opt/R/bin/R /opt/bioconductor/install.R
+{self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R 
 
 #removing some large datasets that get pulled dependencies
-rm /opt/bioconductor/SVM2CRMdata -r
-rm /opt/bioconductor/ITALICSData -r
-rm /opt/bioconductor/LungCancerACvsSCCGEO -r
-rm /opt/bioconductor/mitoODEdata -r
-rm /opt/bioconductor/ABAData -r
-chown 1001 /opt/bioconductor -R 2>/dev/null
+rm {self.paths['docker_storage_bioconductor']}/SVM2CRMdata -r
+rm {self.paths['docker_storage_bioconductor']}/ITALICSData -r
+rm {self.paths['docker_storage_bioconductor']}/LungCancerACvsSCCGEO -r
+rm {self.paths['docker_storage_bioconductor']}/mitoODEdata -r
+rm {self.paths['docker_storage_bioconductor']}/ABAData -r
+chown 1001 {self.paths['docker_storage_bioconductor']} 2>/dev/null
 echo "done"
 """,
         )
@@ -488,35 +547,35 @@ echo "done"
             res += parse_result["version"]
         return f'"{res}"'
 
-    def install_pip_packages(self, venv, storage_path, packages):
+    def install_pip_packages(self, cs, packages):
         """packages are parse_requirements results with method == 'pip'"""
         for x in packages:
             if x["method"] != "pip":
                 raise ValueError("passed not pip packages to install_pip_packages")
         pkg_string = " ".join([self.format_for_pip(x) for x in packages])
+
         self._run_docker(
             self.docker_image,
             f"""
-echo "/opt/{venv}/bin/pip3 install {pkg_string}"
-/opt/{venv}/bin/pip3 install {pkg_string}
-chown 1000 /opt/{venv} -R
+{self.paths['docker_' + cs + '_venv']}/bin/pip3 install {pkg_string}
+chown 1000 {self.paths['docker_' + cs + '_venv']} -R
 #2>/dev/null
 echo "done"
 """,
             {
                 "volumes": {
-                    self.storage_path / "python" / self.python_version: "/opt/python",
-                    storage_path: "/opt/" + venv,
+                    self.paths['storage_python']: (self.paths['docker_storage_python'], 'ro'),
+                    self.paths[f'{cs}_venv']: self.paths[f'docker_{cs}_venv']
                 }
             },
-            "dockerator." + venv + "_pip",
+            'log_code_venv_pip',
         )
-        installed_now = self.find_installed_packages(storage_path)
+        installed_now = self.find_installed_packages(self.paths[f'{cs}_venv'])
         still_missing = set([x["name"] for x in packages]).difference(installed_now)
         if still_missing:
             raise ValueError(
-                f"Installation of {venv} packages failed"
-                f", check logs/{venv}_pip.*\nFailed: {still_missing}"
+                f"Installation of {cs} packages failed"
+                f", check {self.paths['log_' + cs + '_venv_pip']}\nFailed: {still_missing}"
             )
 
     def fill_global_venv(self):
@@ -527,11 +586,10 @@ echo "done"
         non_pip_packages = [x for x in parsed_packages if x["method"] != "pip"]
         if non_pip_packages:
             raise ValueError("the global_venv must receive *only* pypi packages")
-        storage_path = self.storage_path / "global_venv" / self.python_version
-        installed = self.find_installed_packages(storage_path)
+        installed = self.find_installed_packages(self.paths['storage_venv'])
         missing = [x for x in pip_packages if not x["name"] in installed]
         if missing:
-            self.install_pip_packages("global_venv", storage_path, missing)
+            self.install_pip_packages("storage", missing)
 
     def version_is_compatible(self, parsed_req, version):
         if not parsed_req["comp"]:
@@ -559,8 +617,7 @@ echo "done"
         pip_packages = [x for x in parsed_packages if x["method"] == "pip"]
         code_packages = [x for x in parsed_packages if x["method"] in ("git", "hg")]
 
-        code_dir = self.local_venv_path / self.python_version
-        installed_versions = self.find_installed_package_versions(code_dir / "venv")
+        installed_versions = self.find_installed_package_versions(self.paths['code_venv'])
         installed = set(installed_versions.keys())
         missing_pip = [
             x
@@ -570,10 +627,10 @@ echo "done"
         ]
         print("missing_pip", missing_pip)
         if missing_pip:
-            self.install_pip_packages("local_venv", code_dir / "venv", missing_pip)
+            self.install_pip_packages("code", missing_pip)
         missing_code = [x for x in code_packages if not x["name"] in installed]
         for p in code_packages:
-            target_path = code_dir / p["name"]
+            target_path = self.paths['code'] / p["name"]
             if not target_path.exists():
                 print("cloning", p["name"])
                 if p["method"] == "git":
@@ -582,25 +639,25 @@ echo "done"
                     subprocess.check_call(["hg", "clone", p["url"], target_path])
             if not p["name"] in installed:
                 print("pip install -e", "/opt/code/" + p["name"])
+                self.paths[f'log_code_venv_{p["name"]}'] = self.paths['log'] / f'dockerator.code_venv{p["name"]}.log'
                 self._run_docker(
                     self.docker_image,
                     f"""
-/opt/local_venv/bin/pip3 install -U -e /opt/code/{p['name']}
-chown 1000 /opt/local_venv -R
-echo "done"
+echo {self.paths['docker_code_venv']}/bin/pip3 install -U -e {self.paths['docker_code']}/{p['name']}
+{self.paths['docker_code_venv']}/bin/pip3 install -U -e {self.paths['docker_code']}/{p['name']}
+chown 1000 {self.paths['docker_code_venv']} -R
+echo "done2"
 """,
                     {
                         "volumes": {
-                            self.storage_path
-                            / "python"
-                            / self.python_version: "/opt/python",
-                            code_dir / "venv": "/opt/local_venv",
-                            code_dir: "/opt/code",
+                            self.paths['storage_python']: (self.paths['docker_storage_python'], 'ro'),
+                            self.paths['code']: self.paths['docker_code'],
+                            self.paths['code_venv']: self.paths['docker_code_venv'],
                         }
                     },
-                    f'dockerator.local_venv_{p["name"]}_pip',
+                    f'log_code_venv_{p["name"]}',
                 )
-        installed_now = self.find_installed_packages(code_dir / "venv")
+        installed_now = self.find_installed_packages(self.paths['code_venv'])
         still_missing = set([x["name"].lower() for x in missing_code]).difference(installed_now)
         if still_missing:
             raise ValueError(
@@ -610,13 +667,16 @@ echo "done"
 
 
 def parse_requirements(req_str):
-    """Parse the requirements from a requirements file"""
+    """Parse the requirements from a project.setup file"""
     lines = req_str.strip().split("\n")
     result = {}
-    for line in lines:
+    for line_no, line in enumerate(lines):
         line = line.strip()
-        if line.startswith("#"):
+        if line.startswith("#") or not line:
             continue
+        if "=<" in line:
+                raise ValueError("Parsing error, line contained =<, did you mean <=, line %i, was '%s'" % (line_no+1, line))
+    
         for sep in ["==", "=>", "<=", ">", "<"]:
             if sep in line:
                 a, v = line.split(sep)
@@ -624,7 +684,8 @@ def parse_requirements(req_str):
                 break
         else:
             if "=" in line:
-                raise ValueError("Parsing error, line contained =, did you mean ==")
+                raise ValueError("Parsing error, line contained =, did you mean ==, line %i, was '%s'" % (line_no+1, line))
+            
             a = line
             v = ""
             comp = ""

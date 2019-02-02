@@ -23,6 +23,7 @@ RUN apt-get install -y \
  fdisk\
  findutils\
  gcc-8-base\
+ gfortran\
  git\
  gpgv\
  grep\
@@ -106,5 +107,6 @@ RUN apt-get install -y \
  wget\
  xz-utils\
  zlib1g\
- libz-dev\
- 
+ libz-dev
+
+RUN apt-get install -y libopenblas-base libreadline-dev
