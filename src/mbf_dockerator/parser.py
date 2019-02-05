@@ -4,13 +4,33 @@ from pathlib import Path
 from .dockerator import Dockerator
 import tomlkit
 
+def merge_config(d1, d2):
+    result = d1.copy()
+    for key in d2:
+        if not key in result:
+            result[key] = {}
+        for key2 in d2[key]:
+            result[key][key2] = d2[key][key2]
+    return result
 
-def parse_requirements(req_str):
+
+
+
+def parse_requirements(req_file):
     """Parse the requirements from a anysnake.toml file 
     See readme.
     
     """
-    return tomlkit.loads(req_str)
+    used_files = [req_file]
+    with open(req_file) as op:
+        p = tomlkit.loads(op.read())
+    if 'base' in p and 'global_config' in p['base']:
+        with open(p['base']['global_config']) as op:
+            gconfig = tomlkit.loads(op.read())
+            used_files.insert(0, p['base']['global_config'])
+            p = merge_config(gconfig, p)
+    p['used_files'] = used_files
+    return p
 
 
 def parsed_to_dockerator(parsed):
@@ -62,7 +82,7 @@ def parsed_to_dockerator(parsed):
     check_pip_definitions(local_pip_packages)
     cran_packages = parsed.get("cran", {})
     for key, v in cran_packages.items():
-        if v and not re.match("==[0-9.]+", v):
+        if v and not re.match("(==)?[0-9.]+", v):
             raise ValueError(f"Invalid CRAN version specification {key}: '{v}'")
 
     return Dockerator(

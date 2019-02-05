@@ -1,3 +1,4 @@
+#!/home/finkernagel/upstream/dev/bin/python3
 import sys
 import pprint
 from pathlib import Path
@@ -11,7 +12,7 @@ except ModuleNotFoundError:
 import click
 
 config_file = "anysnake.toml"
-home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish"]
+home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", '.jupyter']
 
 
 @click.group()
@@ -20,18 +21,16 @@ def main():
 
 
 def get_dockerator():
-    with open(config_file) as op:
-        req_str = op.read()
-    parsed = parse_requirements(req_str)
+    parsed = parse_requirements(config_file)
     return parsed_to_dockerator(parsed), parsed
 
 
 @main.command()
-def build():
+@click.option("--do-time", default=False, is_flag=True)
+def build(do_time=False):
     """Build everything if necessary - from docker to local venv from project.setup"""
     d, _ = get_dockerator()
-
-    d.ensure()
+    d.ensure(do_time)
     return d
 
 
@@ -64,7 +63,6 @@ def shell(no_build=False, allow_writes=False):
     d, config = get_dockerator()
     if not no_build:
         d.ensure()
-    print("calling run")
 
     d.run(
         "/usr/bin/fish",
@@ -120,11 +118,9 @@ def jupyter(no_build=False):
 @main.command()
 def show_config():
     """Print the config as understood by the parser from anysnake.toml"""
-    with open(config_file) as op:
-        req_str = op.read()
-    parsed = parse_requirements(req_str)
-    d = parsed_to_dockerator(parsed)
+    d, parsed = get_dockerator()
     d.pprint()
+    print("Config files used:", parsed['used_files'])
 
 
 if __name__ == "__main__":

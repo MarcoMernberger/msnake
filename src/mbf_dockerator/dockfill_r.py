@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 import tempfile
 import requests
 from .util import combine_volumes
@@ -20,6 +21,10 @@ class DockFill_R:
             }
         )
         self.volumes = {self.paths["storage_r"]: self.paths["docker_storage_r"]}
+        self.shell_path = str(Path(self.paths["docker_storage_r"]) / "bin")
+
+    def pprint(self):
+        print(f"  R version={self.R_version}")
 
     def check_r_version_exists(self):
         if not re.match(r"\d+\.\d+\.\d", self.R_version):
@@ -87,6 +92,9 @@ class DockFill_Rpy2:
         )
         self.volumes = {self.paths["storage_rpy2"]: self.paths["docker_storage_rpy2"]}
 
+    def pprint(self):
+        pass
+
     def ensure(self):
         # TODO: This will probably need fine tuning for combining older Rs and the
         # latest rpy2 version that supported them
@@ -126,22 +134,29 @@ class DockFill_CRAN:
     def __init__(self, dockerator, dockfill_r):
         self.dockerator = dockerator
         self.paths = self.dockerator.paths
-        self.paths.update({
+        self.paths.update(
+            {
                 "code_r_venv": self.paths["code"] / "cran" / self.dockerator.R_version,
                 "docker_code_r_venv": "/dockerator/r_venv",
-        })
+            }
+        )
         self.cran_mirror = self.dockerator.cran_mirror
         self.dockfill_r = dockfill_r
+        self.volumes = {self.paths["code_r_venv"]: self.paths["docker_code_r_venv"]}
+        self.shell_envs = {"R_LIBS_USER": self.paths["docker_code_r_venv"]}
+
+    def pprint(self):
+        pass
 
     def ensure(self):
-        self.paths['code_r_venv'].mkdir(exist_ok=True, parents=True)
-        parsed_packages = self.dockerator.config.get("r", {})
-        parsed_names = set([x["name"] for x in parsed_packages.values()])
+        self.paths["code_r_venv"].mkdir(exist_ok=True, parents=True)
+        parsed_packages = self.dockerator.cran_packages
+        parsed_names = set(parsed_packages.keys())
         # todo: figure out installed
-        installed = []
+        installed = self.list_installed()
         missing = parsed_names - set(installed)
-        print("CRAN install: %s" % (missing, ))
         if missing:
+            print("CRAN install: %s" % (missing,))
             r_script = f"""
 lib = "{self.paths['docker_code_r_venv']}"
 
@@ -155,17 +170,18 @@ if (!requireNamespace("versions"))
 library(versions)
     """
             for name in missing:
-                entry = parsed_packages[name]
-                if entry["version"]:
-                    r_script += f"install.versions('{entry['name']}','{entry['version']}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
+                version = parsed_packages[name]
+                if version:
+                    r_script += f"install.versions('{name}','{version}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
                 else:
-                    r_script += f"install.packages('{entry['name']}','{entry['version']}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
+                    r_script += f"install.packages('{name}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
 
             r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
             r_build_file.write(r_script)
             r_build_file.flush()
-            self.paths['log_r_cran'] = self.paths['log_code'] / f'log_r_cran.log'
-
+            self.paths["log_r_cran"] = (
+                self.paths["log_code"] / f"dockerator.log_r_cran.log"
+            )
             self.dockerator._run_docker(
                 f"""
 export R_HOME={self.paths['docker_storage_r']}
@@ -187,5 +203,15 @@ echo "done"
                         ],
                     )
                 },
-                log_name = 'log_r_cran'
+                log_name="log_r_cran",
             )
+            now_installed = set(self.list_installed())
+            still_missing = [x for x in missing if x not in now_installed]
+            if missing:
+                raise ValueError(
+                    f"Still missing: {still_missing}\nCheck {self.paths['log_r_cran']}"
+                )
+
+    def list_installed(self):
+        dir = self.paths["code_r_venv"]
+        return [x.name for x in dir.glob("*") if x.is_dir()]

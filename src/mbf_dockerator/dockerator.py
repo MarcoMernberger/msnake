@@ -1,5 +1,6 @@
 from pathlib import Path
 from docker import from_env as docker_from_env
+import time
 import tempfile
 import shutil
 import requests
@@ -79,8 +80,8 @@ class Dockerator:
         self.strategies = [
             DockFill_Docker(self),
             dfp,
+            DockFill_CodeVenv(self, dfp),  # since I want them earlier in the path!
             DockFill_GlobalVenv(self, dfp),
-            DockFill_CodeVenv(self, dfp),
         ]
         dfr = None
         if r_version:
@@ -109,29 +110,23 @@ class Dockerator:
 
     def pprint(self):
         print("Dockerator")
-        print(f"  Python version={self.python_version}")
-        print(f"  R version={self.R_version}")
-        print(f"  Bioconductor version={self.bioconductor_version}")
-        print("")
         print(f"  Storage path: {self.paths['storage']}")
         print(f"  local code path: {self.paths['code']}")
         print(f"  global logs in: {self.paths['log_storage']}")
         print(f"  local logs in: {self.paths['log_code']}")
         print("")
-        print("  Global python packages")
-        for entry in self.global_python_packages.items():
-            print(f"    {entry}")
-
-        print("  Local python packages")
-        for entry in self.local_python_packages.items():
-            print(f"    {entry}")
+        for s in self.strategies:
+            s.pprint()
 
         # Todo: cran
         # todo: modularize into dockerfills
 
-    def ensure(self):
+    def ensure(self, do_time=False):
         for s in self.strategies:
+            start = time.time()
             s.ensure()
+            if do_time:
+                print(s.__class__.__name__, time.time() - start)
 
     def run(
         self,
@@ -151,9 +146,13 @@ class Dockerator:
         # so we use the command line interface...
 
         tf = tempfile.NamedTemporaryFile(mode="w")
-        tf.write(
-            f"export PATH={self.paths['docker_code_venv']}/bin:{self.paths['docker_storage_venv']}/bin:$PATH\n"
+        path_str = (
+            ":".join(
+                [x.shell_path for x in self.strategies if hasattr(x, "shell_path")]
+            )
+            + ":$PATH"
         )
+        tf.write(f"export PATH={path_str}\n")
         tf.write(bash_script)
         tf.flush()
 
@@ -183,6 +182,9 @@ class Dockerator:
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
+        for s in self.strategies:
+            if hasattr(s, 'shell_envs'):
+                env.update(s.shell_envs)
         for key, value in env.items():
             cmd.append("-e")
             cmd.append("%s=%s" % (key, value))
@@ -202,7 +204,7 @@ class Dockerator:
 
         cmd.extend(["-w", "/project"])
         cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
-        pprint.pprint(cmd)
+        # pprint.pprint(cmd)
         p = subprocess.Popen(cmd)
         p.communicate()
 

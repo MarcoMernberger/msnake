@@ -145,4 +145,4 @@ RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$1$/wnlZv
 RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1002
 RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1003
 RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0" --shell=/bin/bash u1004
-RUN apt-get -y install fish
+RUN apt-get -y install fish libudunits2-0 libudunits2-dev

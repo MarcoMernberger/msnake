@@ -36,10 +36,12 @@ class DockFill_Docker:
                 print("having to call", bs)
                 subprocess.check_call(
                     [bs],
-                    cwd=self.paths["docker_image_build_scripts"] / self.dockerator.docker_image,
+                    cwd=self.paths["docker_image_build_scripts"]
+                    / self.dockerator.docker_image,
                 )
             else:
                 print(bs, "not found")
                 client.images.pull(self.dockerator.docker_image)
 
-        pass
+    def pprint(self):
+        print(f"  docker_image = {self.dockerator.docker_image}")

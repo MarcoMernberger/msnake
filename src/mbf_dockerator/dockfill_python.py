@@ -30,6 +30,9 @@ class DockFill_Python:
             ]
         }
 
+    def pprint(self):
+        print(f"  Python version={self.python_version}")
+
     def ensure(self):
         # python beyond these versions needs libssl 1.1
         # the older ones need libssl1.0
@@ -53,7 +56,7 @@ class DockFill_Python:
             relative_check_filename="bin/virtualenv",
             log_name="log_python",
             additional_volumes={},
-            version_check=self.check_python_version_exists(),
+            version_check=self.check_python_version_exists,
             root=True,
             build_cmds=f"""
 #/bin/bash
@@ -101,9 +104,7 @@ class _DockerFillVenv:
         self.create_venv()
         self.fill_venv()
 
-    
     def fill_venv(self):
-        print("filling", self.name)
         code_packages = {
             k: v
             for (k, v) in self.packages.items()
@@ -278,7 +279,13 @@ class DockFill_GlobalVenv(_DockerFillVenv):
             self.paths["storage_venv"]: dockerator.paths[f"docker_storage_venv"]
         }
         self.packages = self.dockerator.global_python_packages
+        self.shell_path = str(Path(self.paths['docker_storage_venv']) / 'bin')
         super().__init__()
+
+    def pprint(self):
+        print("  Global python packages")
+        for entry in self.dockerator.global_python_packages.items():
+            print(f"    {entry}")
 
     def create_venv(self):
         self.dockerator.build(
@@ -315,7 +322,13 @@ class DockFill_CodeVenv(_DockerFillVenv):
             self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
         }
         self.packages = self.dockerator.local_python_packages
+        self.shell_path = str(Path(self.paths['docker_code_venv']) / 'bin')
         super().__init__()
+
+    def pprint(self):
+        print("  Local python packages")
+        for entry in self.dockerator.local_python_packages.items():
+            print(f"    {entry}")
 
     def create_venv(self):
         lib_code = (
