@@ -15,9 +15,8 @@ class DockFill_R:
             {
                 "storage_r": self.paths["storage"] / "R" / self.R_version,
                 "docker_storage_r": "/dockerator/R",
-                "log_r": self.paths["log_storage"] / "dockerator.R.log",
-                "code_r_venv": self.paths["code"] / "cran" / self.R_version,
-                "docker_code_r_venv": "/dockerator/r_venv",
+                "log_r": self.paths["log_storage"]
+                / f"dockerator.R.{self.R_version}.log",
             }
         )
         self.volumes = {self.paths["storage_r"]: self.paths["docker_storage_r"]}
@@ -48,7 +47,7 @@ class DockFill_R:
             target_dir=self.paths["storage_r"],
             target_dir_inside_docker=self.paths["docker_storage_r"],
             relative_check_filename="bin/R",
-            log_name="log_r",
+            log_name=f"log_r",
             additional_volumes={},
             version_check=self.check_r_version_exists(),
             build_cmds=f"""
@@ -71,7 +70,7 @@ class DockFill_Rpy2:
         self.paths = self.dockerator.paths
         self.python_version = self.dockerator.python_version
         self.R_version = self.dockerator.R_version
-        self.dockfill_py = dockfill_py
+        self.dockfill_python = dockfill_py
         self.dockfill_r = dockfill_r
 
         self.paths.update(
@@ -82,7 +81,8 @@ class DockFill_Rpy2:
                     / f"{self.python_version}_{self.R_version}"
                 ),
                 "docker_storage_rpy2": "/dockerator/rpy2",
-                "log_rpy2": self.paths["log_storage"] / "dockerator.rpy2.log",
+                "log_rpy2": self.paths["log_storage"]
+                / f"dockerator.rpy2.{self.python_version}-{self.R_version}.log",
             }
         )
         self.volumes = {self.paths["storage_rpy2"]: self.paths["docker_storage_rpy2"]}
@@ -93,10 +93,10 @@ class DockFill_Rpy2:
         self.dockerator.build(
             target_dir=self.paths["storage_rpy2"],
             target_dir_inside_docker=self.paths["docker_storage_rpy2"],
-            relative_check_filename=f"lib/python{self.major_python_version}/site-packages/rpy2/__init__.py",
-            log_name="log_rpy2",
+            relative_check_filename=f"lib/python{self.dockerator.major_python_version}/site-packages/rpy2/__init__.py",
+            log_name=f"log_rpy2",
             additional_volumes=combine_volumes(
-                "ro", self.dockfill_python.volumes, self.dockfill_r.volumes
+                ro=[self.dockfill_python.volumes, self.dockfill_r.volumes]
             ),
             build_cmds=f"""
 
@@ -126,41 +126,66 @@ class DockFill_CRAN:
     def __init__(self, dockerator, dockfill_r):
         self.dockerator = dockerator
         self.paths = self.dockerator.paths
+        self.paths.update({
+                "code_r_venv": self.paths["code"] / "cran" / self.dockerator.R_version,
+                "docker_code_r_venv": "/dockerator/r_venv",
+        })
         self.cran_mirror = self.dockerator.cran_mirror
         self.dockfill_r = dockfill_r
 
     def ensure(self):
-        return
-        parsed_packages = list(self.local_venv_packages.values())
+        self.paths['code_r_venv'].mkdir(exist_ok=True, parents=True)
+        parsed_packages = self.dockerator.config.get("r", {})
+        parsed_names = set([x["name"] for x in parsed_packages.values()])
+        # todo: figure out installed
         installed = []
-        cran_packages = [x for x in parsed_packages if x["method"] == "cran"]
-        missing = set(cran_packages) - set(installed)
+        missing = parsed_names - set(installed)
+        print("CRAN install: %s" % (missing, ))
         if missing:
-            r_script = """
+            r_script = f"""
 lib = "{self.paths['docker_code_r_venv']}"
+
+r <- getOption("repos")
+r["CRAN"] <- "{self.dockerator.cran_mirror}"
+options(repos=r)
+
 .libPaths(c(lib, .libPaths()))
 if (!requireNamespace("versions"))
     install.packages("versions", lib=lib, Ncpus={self.dockerator.cores})
+library(versions)
     """
             for name in missing:
-                if entry['version']:
-                    r_script += f"install.versions('{entry['name']}','{entry['version']}', lib=lib, Ncpus{self.dockerator.cores})\n"
+                entry = parsed_packages[name]
+                if entry["version"]:
+                    r_script += f"install.versions('{entry['name']}','{entry['version']}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
                 else:
-                    r_script += f"install.packages('{entry['name']}','{entry['version']}', lib=lib, Ncpus{self.dockerator.cores})\n"
-
+                    r_script += f"install.packages('{entry['name']}','{entry['version']}', lib=lib, Ncpus={self.dockerator.cores}, dependencies=TRUE)\n"
 
             r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
-            r_build_file.write(r_build_script)
+            r_build_file.write(r_script)
             r_build_file.flush()
+            self.paths['log_r_cran'] = self.paths['log_code'] / f'log_r_cran.log'
 
-            self._run_docker(
-                """{self.paths['docker_storage_r']}/bin/R --no-save < /opt/install.R
+            self.dockerator._run_docker(
+                f"""
+export R_HOME={self.paths['docker_storage_r']}
+
+
+{self.paths['docker_storage_r']}/bin/R --no-save < /opt/install.R
+echo "done"
                     """,
-                volumes=combine_volumes(ro = [self.dockfill_r.volumes],
-                                        rw = [
-                {
-                    self.paths["code_r_venv"]: self.paths["docker_code_r_venv"],
-                    r_build_file.name: "/opt/install.R",
-                }],
-                )
+                run_kwargs={
+                    "volumes": combine_volumes(
+                        ro=[self.dockfill_r.volumes],
+                        rw=[
+                            {
+                                self.paths["code_r_venv"]: self.paths[
+                                    "docker_code_r_venv"
+                                ],
+                                r_build_file.name: "/opt/install.R",
+                            }
+                        ],
+                    )
+                },
+                log_name = 'log_r_cran'
             )

@@ -8,32 +8,28 @@ class DockFill_Bioconductor:
     def __init__(self, dockerator, dockfill_r):
         self.dockerator = dockerator
         self.dockfill_r = dockfill_r
-        self.paths = self.paths
+        self.paths = self.dockerator.paths
+        self.bioconductor_version = dockerator.bioconductor_version
         self.paths.update(
             {
                 "storage_bioconductor": (
                     self.paths["storage"] / "bioconductor" / self.bioconductor_version
                 ),
-                "storage_bioconductor_r_version": (
-                    self.paths["storage"]
-                    / "bioconductor_r_version"
-                    / self.bioconductor_version
-                ),
                 "docker_storage_bioconductor": "/dockerator/bioconductor",
                 "log_bioconductor": (
-                    self.paths["log_storage"] / "dockerator.bioconductor.log"
+                    self.paths["log_storage"]
+                    / f"dockerator.bioconductor.{self.bioconductor_version}.log"
                 ),
-                "storage_bioconductor_temp": (
-                    self.paths["storage"]
-                    / "bioconductor/downloads"
-                    / self.bioconductor_version
-                ),
-                "docker_storage_bioconductor_temp": "/dockerator/bioconductor_downloads",
             }
         )
+        self.volumes = {
+            self.paths["storage_bioconductor"]: self.paths[
+                "docker_storage_bioconductor"
+            ]
+        }
 
     @staticmethod
-    def get_bioconductor_r_pairs(self):
+    def get_bioconductor_r_pairs():
         pairs = {}
         url = "https://bioconductor.org/about/release-announcements/"
         bc = requests.get(url).text
@@ -55,6 +51,15 @@ class DockFill_Bioconductor:
 
     @classmethod
     def find_r_from_bioconductor(cls, dockerator, bioconductor_version):
+        dockerator.paths.update(
+            {
+                "storage_bioconductor_r_version": (
+                    dockerator.paths["storage"]
+                    / "bioconductor_r_version"
+                    / bioconductor_version
+                )
+            }
+        )
         cache_file = dockerator.paths["storage_bioconductor_r_version"]
         if not cache_file.exists():
             cache_file.parent.mkdir(exist_ok=True, parents=True)
@@ -86,46 +91,48 @@ class DockFill_Bioconductor:
                 f"bioconductor {self.bioconductor_version} requires R {major}.*, but you requested {self.R_version}"
             )
 
-    def ensure(self):
-        self.check_r_bioconductor_match()
+    def list_available_bc_packages(self):
+        import json
         install_list_file = (
             self.paths["storage_bioconductor"] / "should_be_installed.txt"
         )
         if not install_list_file.exists():
-            # we can not use BiocManager::available
-            # for that also lists >15k data packages...
-            # that we do not want
-            r = requests.get(
-                f"https://www.bioconductor.org/packages/{self.dockorator.bioconductor_version}/bioc/"
-            ).text
-            packages = re.findall('href="html/(.+).html"', r)
-            install_list_file.write_text("\n".join(packages))
-        to_install = install_list_file.read_text().strip().split("\n")
-        installed = []
-        self.paths["storage_bioconductor"].mkdir(exist_ok=True)
-        installed = [
+            c = BioConductorPackageInfo(self.bioconductor_version)
+            c.load()
+            bioc, cran = c.get_bioc_and_cran_deps()
+            install_list_file.write_text(json.dumps([list(bioc), list(cran)]))
+        return json.loads(install_list_file.read_text())
+
+    def ensure(self):
+        self.check_r_bioconductor_match()
+        self.paths["storage_bioconductor"].mkdir(exist_ok=True, parents=True)
+        to_install_bioc, to_install_cran = self.list_available_bc_packages()
+
+        installed = set([
             x for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()
-        ]
-        missing = set(to_install) - set(installed)
-        if missing:
-            print(f"missing {len(missing)} bioconductor packages")
-            package_vector = "c(" + ", ".join([f'"{x}"' for x in missing]) + ")"
+        ])
+        missing_cran = [x for x in to_install_cran if not x in installed]
+        missing_bioc = [x for x in to_install_bioc if not x in installed]
+
+        if missing_cran or missing_bioc:
+            print(f"missing {len(missing_bioc)} bioconductor packages, {len(missing_cran)} cran packages")
+            bioc_package_vector = "c(" + ", ".join([f'"{x}"' for x in missing_bioc]) + ")"
+            cran_package_vector = "c(" + ", ".join([f'"{x}"' for x in missing_cran]) + ")"
             r_build_script = f"""
 r <- getOption("repos")
-r["CRAN"] <- "{self.dockorator.cran_mirror}"
+r["CRAN"] <- "{self.dockerator.cran_mirror}"
 options(repos=r)
 
 lib = "{self.paths['docker_storage_bioconductor']}"
 .libPaths(c(lib, .libPaths()))
 if (!requireNamespace("BiocManager"))
-    install.packages("BiocManager", lib=lib, Ncpus={self.dockorator.cores},
-    destdir="{self.paths['docker_storage_bioconductor_temp']}"
+    install.packages("BiocManager", lib=lib, Ncpus={self.dockerator.cores})
     
-    )
-BiocManager::install({package_vector}, lib=lib, Ncpus={self.dockorator.cores},
-    destdir="{self.paths['docker_storage_bioconductor_temp']}"
-
-)
+print("installing cran")
+install.packages({cran_package_vector}, lib=lib, Ncpus={self.dockerator.cores}, dependencies=T)
+    
+print("installing bioc")
+BiocManager::install({bioc_package_vector}, lib=lib, Ncpus={self.dockerator.cores}, dependencies=F)
 """
             bash_script = f"""
 {self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R 
@@ -134,21 +141,75 @@ BiocManager::install({package_vector}, lib=lib, Ncpus={self.dockorator.cores},
             r_build_file.write(r_build_script)
             r_build_file.flush()
 
-            self.dockorator._run_docker(
+            self.dockerator._run_docker(
                 bash_script,
                 {
                     "volumes": combine_volumes(
                         ro=[self.dockfill_r.volumes],
-                        rw=[
-                            {
-                                r_build_file.name: "/opt/install.R",
-                                self.paths["storage_bioconductor"]: (
-                                    self.paths["docker_storage_bioconductor"],
-                                    "rw",
-                                ),
-                            }
-                        ],
+                        rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
                     )
                 },
-                self.paths["log_bioconductor"],
+                "log_bioconductor",
             )
+
+
+class BioConductorPackageInfo:
+    """An interface to bioconductors PACKAGES
+    information - used to calculate what to install
+    """
+
+    def __init__(self, version):
+        self.urls = {
+            "software": f"https://bioconductor.org/packages/{version}/bioc/src/contrib/PACKAGES",
+            "annotation": f"https://bioconductor.org/packages/{version}/data/annotation/src/contrib/PACKAGES",
+            "experiment": f"https://bioconductor.org/packages/{version}/data/experiment/src/contrib/PACKAGES",
+        }
+
+    def load(self):
+        self.package_info = {}
+        for key, url in self.urls.items():
+            raw = requests.get(url).text
+            raw = re.split("^Package: ", raw, flags=re.MULTILINE)[1:]
+            pkgs = {}
+            for r in raw:
+                name = r[: r.find("\n")]
+                deps = self.by_tag(r, "Depends")
+                suggests = self.by_tag(r, "Suggests")
+                imports = self.by_tag(r, "Imports")
+                pkgs[name] = {"depends": deps, "suggests": suggests, "imports": imports}
+            self.package_info[key] = pkgs
+
+    def get_bioc_and_cran_deps(self):
+        """What is the bare minimum to install from bioconductor and cran?
+        result is (bioc_packages, non_bioc_packages), which the later being presumably
+        cran 
+        bioc_packages is in topological order, ready to install
+        
+        """
+        all_deps = set()
+        for r in self.package_info["software"].values():
+            all_deps.update(r["depends"])
+        all_deps = all_deps.difference(set(self.package_info["annotation"].keys()))
+        all_deps = all_deps.difference(set(self.package_info["experiment"].keys()))
+        cran_deps = all_deps.difference(set(self.package_info["software"].keys()))
+        bioc_deps = list(self.package_info['software'].keys())
+        return bioc_deps, cran_deps
+
+    @staticmethod
+    def by_tag(r, tag):
+        if "\n" + tag in r:
+            r = r[r.find("\n" + tag) + len(tag) + 3 :]
+            if "\n" in r:
+                r = r[: r.find("\n")]
+            r = re.split(", ?", r)
+            r = [x.strip() for x in r]
+            m = []
+            for x in r:
+                if x.strip():
+                    y = re.findall("^[^ ()]+", x)
+                    if not y:
+                        raise ValueError(x)
+                    m.append(y[0])
+            return m
+        return []
+

@@ -15,6 +15,7 @@ from .dockfill_docker import DockFill_Docker
 from .dockfill_python import DockFill_Python, DockFill_GlobalVenv, DockFill_CodeVenv
 from .dockfill_r import DockFill_R, DockFill_CRAN, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
+from .util import combine_volumes
 
 
 class Dockerator:
@@ -38,17 +39,17 @@ class Dockerator:
         bioconductor_version,
         r_version,
         global_python_packages,
-            local_python_packages,
-            cran_packages,
+        local_python_packages,
+        cran_packages,
         storage_path,
         code_path,
         cores=None,
-        cran_mirror="https://cloud.r-project.org"
+        cran_mirror="https://cloud.r-project.org",
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
-        if not self.cran_mirror.endswith('/'):
-            self.cran_mirror += '/'
+        if not self.cran_mirror.endswith("/"):
+            self.cran_mirror += "/"
 
         self.storage_path = Path(storage_path)
         if not self.storage_path.exists():
@@ -60,10 +61,9 @@ class Dockerator:
         self.docker_image = docker_image
         self.python_version = python_version
         self.bioconductor_version = bioconductor_version
-        self.global_python_packages = global_python_packages 
-        self.local_python_packages = local_python_packages 
+        self.global_python_packages = global_python_packages
+        self.local_python_packages = local_python_packages
         self.cran_packages = cran_packages
-        
 
         self.paths = {
             "storage": storage_path,
@@ -117,28 +117,94 @@ class Dockerator:
         print(f"  local code path: {self.paths['code']}")
         print(f"  global logs in: {self.paths['log_storage']}")
         print(f"  local logs in: {self.paths['log_code']}")
-        print('')
-        print('  Global python packages')
+        print("")
+        print("  Global python packages")
         for entry in self.global_python_packages.items():
             print(f"    {entry}")
 
-        print('  Local python packages')
+        print("  Local python packages")
         for entry in self.local_python_packages.items():
             print(f"    {entry}")
 
-        #Todo: cran
-        #todo: modularize into dockerfills
-
+        # Todo: cran
+        # todo: modularize into dockerfills
 
     def ensure(self):
         for s in self.strategies:
             s.ensure()
 
-    def run(self, bash_script):
-        volumes = {}
-        self._run_docker(bash_script, {"remove": True, "volumes": volumes}, None, False)
+    def run(
+        self,
+        bash_script,
+        env={},
+        ports={},
+        py_spy_support=True,
+        home_files={},
+        volumes_ro={},
+        volumes_rw={},
+        allow_writes=False,
+    ):
+        env = env.copy()
 
-        pass
+        # docker-py has no concept of interactive dockers
+        # dockerpty does not work with current docker-py
+        # so we use the command line interface...
+
+        tf = tempfile.NamedTemporaryFile(mode="w")
+        tf.write(
+            f"export PATH={self.paths['docker_code_venv']}/bin:{self.paths['docker_storage_venv']}/bin:$PATH\n"
+        )
+        tf.write(bash_script)
+        tf.flush()
+
+        home_inside_docker = "/home/u%i" % os.getuid()
+        ro_volumes = [{tf.name: "/opt/run.sh"}]
+        rw_volumes = [{os.path.abspath("."): "/project"}]
+        for h in home_files:
+            p = Path("~").expanduser() / h
+            if p.exists():
+                if p.is_dir():
+                    rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+                else:
+                    ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+
+        if allow_writes:
+            rw_volumes.extend([df.volumes for df in self.strategies])
+        else:
+            ro_volumes.extend([df.volumes for df in self.strategies])
+        ro_volumes.append(volumes_ro)
+        rw_volumes.append(volumes_rw)
+        volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
+
+        cmd = ["docker", "run", "-it"]
+        for outside_path, v in volumes.items():
+            inside_path, mode = v
+            cmd.append("-v")
+            cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
+        if not "HOME" in env:
+            env["HOME"] = home_inside_docker
+        for key, value in env.items():
+            cmd.append("-e")
+            cmd.append("%s=%s" % (key, value))
+        cmd.append("-u")
+        cmd.append("u%i" % os.getuid())
+        if py_spy_support:
+            cmd.extend(
+                [  # py-spy suppor"/home/u%i" % os.getuid()t
+                    "--cap-add=SYS_PTRACE",
+                    "--security-opt=apparmor:unconfined",
+                    "--security-opt=seccomp:unconfined",
+                ]
+            )
+
+        for from_port, to_port in ports:
+            cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
+
+        cmd.extend(["-w", "/project"])
+        cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
+        pprint.pprint(cmd)
+        p = subprocess.Popen(cmd)
+        p.communicate()
 
     def _run_docker(self, bash_script, run_kwargs, log_name, root=False):
         docker_image = self.docker_image

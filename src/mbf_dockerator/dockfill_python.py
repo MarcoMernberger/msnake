@@ -72,13 +72,15 @@ echo "done"
     def check_python_version_exists(self):
         version = self.python_version
         r = requests.get("https://www.python.org/doc/versions/").text
-        if not f"release/{version}/" in r:
+        if not (
+            f'release/{version}/"' in r or f'release/{version}"'
+        ):  # some have / some don't
             raise ValueError(
                 f"Unknown python version {version} - check https://www.python.org/doc/versions/"
             )
 
 
-re_github = r"[A-Za-z0-9]+\/[A-Za-z0-9]+"
+re_github = r"[A-Za-z0-9-]+\/[A-Za-z0-9]+"
 
 
 class _DockerFillVenv:
@@ -137,7 +139,7 @@ echo "done"
             or not version_is_compatible(v, installed_versions[k.lower()])
         }
         if missing_pip:
-            print("\t pip install", list(missing_pip.keys()))
+            print("\tpip install", list(missing_pip.keys()))
             self.install_pip_packages(missing_pip, self.dockfill_python)
 
         missing_code = set([k for k in code_packages.keys() if not k in installed])
@@ -146,52 +148,55 @@ echo "done"
     def install_code_packages(self, code_packages, missing_code):
         for name, url_spec in code_packages.items():
             log_key = f"log_{self.name}_venv_{name}"
-            self.paths[log_key] = self.log_path / (
-                f"dockerator.{self.name}_venv_{name}.log"
+            self.paths[log_key + "_pip"] = self.log_path / (
+                f"dockerator.{self.name}_venv_{name}.pip.log"
+            )
+            self.paths[log_key + "_clone"] = self.log_path / (
+                f"dockerator.{self.name}_venv_{name}.pip.log"
             )
             target_path = self.paths["code"] / name
-            log_file = open(self.paths[log_key], "wb")
-            if not target_path.exists():
-                missing_code.add(name)
-                print("\tcloning", name)
-                url = url_spec
-                if url.startswith("@"):
-                    url = url[1:]
-                if re.match(re_github, url):
-                    method = "git"
-                    url = "https://github.com/" + url
-                elif url.startswith("git+"):
-                    method = "git"
-                    url = url[4:]
-                elif url.startswith("hg+"):
-                    method = "hg"
-                    url = url[3:]
-                else:
-                    raise ValueError(
-                        "Could not parse url / must be git+http(s) / hg+https, or github path"
-                    )
-                if method == "git":
-                    subprocess.check_call(
-                        ["git", "clone", url, target_path],
-                        stdout=log_file,
-                        stderr=log_file,
-                    )
-                elif method == "hg":
-                    subprocess.check_call(
-                        ["hg", "clone", url, target_path],
-                        stdout=log_file,
-                        stderr=log_file,
-                    )
+            with open(self.paths[log_key + "_clone"], "wb") as log_file:
+                if not target_path.exists():
+                    missing_code.add(name)
+                    print("\tcloning", name)
+                    url = url_spec
+                    if url.startswith("@"):
+                        url = url[1:]
+                    if re.match(re_github, url):
+                        method = "git"
+                        url = "https://github.com/" + url
+                    elif url.startswith("git+"):
+                        method = "git"
+                        url = url[4:]
+                    elif url.startswith("hg+"):
+                        method = "hg"
+                        url = url[3:]
+                    else:
+                        raise ValueError(
+                            "Could not parse url / must be git+http(s) / hg+https, or github path"
+                        )
+                    if method == "git":
+                        subprocess.check_call(
+                            ["git", "clone", url, target_path],
+                            stdout=log_file,
+                            stderr=log_file,
+                        )
+                    elif method == "hg":
+                        subprocess.check_call(
+                            ["hg", "clone", url, target_path],
+                            stdout=log_file,
+                            stderr=log_file,
+                        )
         for name in missing_code:
             print("\tpip install -e", "/opt/code/" + name)
             safe_name = name.replace("/", "_")
-
+            log_key = f"log_{self.name}_venv_{name}"
             self.dockerator._run_docker(
                 f"""
-echo {self.paths['docker_code_venv']}/bin/pip3 install -U -e {self.paths['docker_code']}/{name}
-{self.paths['docker_code_venv']}/bin/pip3 install -U -e {self.paths['docker_code']}/{name}
-echo "done"
-""",
+    echo {self.paths['docker_code_venv']}/bin/pip install -U -e {self.paths['docker_code']}/{name}
+    {self.paths['docker_code_venv']}/bin/pip install -U -e {self.paths['docker_code']}/{name}
+    echo "done"
+    """,
                 {
                     "volumes": combine_volumes(
                         ro=self.dockfill_python.volumes,
@@ -201,7 +206,7 @@ echo "done"
                         ],
                     )
                 },
-                log_file,
+                log_key + "_pip",
             )
         installed_now = self.find_installed_packages(
             self.dockerator.major_python_version
@@ -240,7 +245,7 @@ echo "done"
 
         self.dockerator._run_docker(
             f"""
-    {self.target_path_inside_docker}/bin/pip3 install {pkg_string}
+    {self.target_path_inside_docker}/bin/pip install {pkg_string}
     echo "done"
     """,
             {
@@ -256,7 +261,11 @@ echo "done"
         )
         still_missing = set(packages.keys()).difference(installed_now)
         if still_missing:
-            raise ValueError(f"Installation of packages failed: {still_missing}")
+            raise ValueError(
+                f"Installation of packages failed: {still_missing}\n"
+                + "Check log in "
+                + str(self.paths[f"log_{self.name}_venv_pip"])
+            )
 
 
 class DockFill_GlobalVenv(_DockerFillVenv):

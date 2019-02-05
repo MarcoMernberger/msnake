@@ -1,3 +1,5 @@
+from pathlib import Path
+
 def combine_volumes(ro=[], rw=[]):
     d = dict()
     for (what, mode) in [(ro, "ro"), (rw, "rw")]:
@@ -9,5 +11,5 @@ def combine_volumes(ro=[], rw=[]):
                     v = v["bind"]
                 elif isinstance(v, tuple):
                     v = v[0]
-                d[k] = (v, mode)
+                d[str(Path(k).absolute())] = (v, mode)
     return d
