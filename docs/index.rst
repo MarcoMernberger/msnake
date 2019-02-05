@@ -1,11 +1,11 @@
 ==============
-mbf_dockerator
+mbf_anysnake
 ==============
 
-Welcome to **mbf_dockerator**, which 
+Welcome to **mbf_anysnake**, which 
 abstracts ubuntu, python, R and bioconductor versions.
 
-It's source lives at `github <https://github.com/TyberiusPrime/mbf_dockerator>`_.
+It's source lives at `github <https://github.com/TyberiusPrime/mbf_anysnake>`_.
 
 Quickstart
 ==========

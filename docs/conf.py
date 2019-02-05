@@ -35,7 +35,7 @@ except ImportError:
     from sphinx import apidoc
 
 output_dir = os.path.join(__location__, "api")
-module_dir = os.path.join(__location__, "../src/mbf_dockerator")
+module_dir = os.path.join(__location__, "../src/mbf_anysnake")
 try:
     shutil.rmtree(output_dir)
 except (IOError, OSError):
@@ -87,7 +87,7 @@ source_parsers = {
 master_doc = 'index'
 
 # General information about the project.
-project = u'mbf_dockerator'
+project = u'mbf_anysnake'
 copyright = u'2019, Florian Finkernagel'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -159,7 +159,7 @@ html_static_path = ["docs/_static"]
 
 
 html_theme_options = {
-    'navbar_title': 'mbf_dockerator',
+    'navbar_title': 'mbf_anysnake',
     'globaltoc_depth': 2,
     'globaltoc_includehidden': 'true',
     'source_link_position': 'footer',
@@ -174,7 +174,7 @@ html_theme_options = {
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
 try:
-    from mbf_dockerator import __version__ as version
+    from mbf_anysnake import __version__ as version
 except ImportError:
     pass
 else:
@@ -239,7 +239,7 @@ html_show_sourcelink = False
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'mbf_dockerator-doc'
+htmlhelp_basename = 'mbf_anysnake-doc'
 
 
 # -- Options for LaTeX output --------------------------------------------------
@@ -258,7 +258,7 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'user_guide.tex', u'mbf_dockerator Documentation',
+  ('index', 'user_guide.tex', u'mbf_anysnake Documentation',
    u'Florian Finkernagel', 'manual'),
 ]
 
@@ -305,7 +305,7 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
 def setup(app):
     app.add_stylesheet("my-styles.css") # also can be a full URL
     app.connect('autodoc-skip-member', autodoc_skip_member)
-    github_doc_root = "https://github.com/TyberiusPrime/mbf_dockerator"
+    github_doc_root = "https://github.com/TyberiusPrime/mbf_anysnake"
     app.add_config_value('recommonmark_config', {
             'url_resolver': lambda url: github_doc_root + url,
             'auto_toc_tree_section': 'Contents',

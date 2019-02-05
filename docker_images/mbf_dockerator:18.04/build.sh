@@ -1,3 +1,3 @@
 #!/bin/bash
-docker build -t mbf_dockerator:18.04 .
+docker build -t mbf_anysnake:18.04 .
 

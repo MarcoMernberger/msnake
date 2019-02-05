@@ -47,7 +47,7 @@ def parsed_to_dockerator(parsed):
     if "docker_image" in base:
         docker_image = base["docker_image"]
     else:
-        docker_image = "mbf_dockerator:18.04"
+        docker_image = "mbf_anysnake:18.04"
 
     if "bioconductor" in base:
         bioconductor_version = base["bioconductor"]

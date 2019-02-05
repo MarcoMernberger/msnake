@@ -1,4 +1,5 @@
 import requests
+from pathlib import Path
 import tempfile
 import re
 from .util import combine_volumes
@@ -19,6 +20,10 @@ class DockFill_Bioconductor:
                 "log_bioconductor": (
                     self.paths["log_storage"]
                     / f"dockerator.bioconductor.{self.bioconductor_version}.log"
+                ),
+                "log_bioconductor.todo": (
+                    self.paths["log_storage"]
+                    / f"dockerator.bioconductor.{self.bioconductor_version}.todo.log"
                 ),
             }
         )
@@ -93,6 +98,7 @@ class DockFill_Bioconductor:
 
     def list_available_bc_packages(self):
         import json
+
         install_list_file = (
             self.paths["storage_bioconductor"] / "should_be_installed.txt"
         )
@@ -103,21 +109,33 @@ class DockFill_Bioconductor:
             install_list_file.write_text(json.dumps([list(bioc), list(cran)]))
         return json.loads(install_list_file.read_text())
 
+    def list_installed(self):
+        return [x.name for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()]
+
     def ensure(self):
         self.check_r_bioconductor_match()
         self.paths["storage_bioconductor"].mkdir(exist_ok=True, parents=True)
         to_install_bioc, to_install_cran = self.list_available_bc_packages()
 
-        installed = set([
-            x for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()
-        ])
+        installed = set(
+            self.list_installed()
+        )
         missing_cran = [x for x in to_install_cran if not x in installed]
         missing_bioc = [x for x in to_install_bioc if not x in installed]
 
         if missing_cran or missing_bioc:
-            print(f"missing {len(missing_bioc)} bioconductor packages, {len(missing_cran)} cran packages")
-            bioc_package_vector = "c(" + ", ".join([f'"{x}"' for x in missing_bioc]) + ")"
-            cran_package_vector = "c(" + ", ".join([f'"{x}"' for x in missing_cran]) + ")"
+            msg = f"missing {len(missing_bioc)} bioconductor packages, {len(missing_cran)} cran packages"
+            print(msg)
+            Path(self.paths["log_bioconductor.todo"]).write_text(msg + "\n" + 
+                                                                 str(missing_bioc) + "\n"
+                                                                 str(missing_cran) + "\n"
+                                                                 )
+            bioc_package_vector = (
+                "c(" + ", ".join([f'"{x}"' for x in missing_bioc]) + ")"
+            )
+            cran_package_vector = (
+                "c(" + ", ".join([f'"{x}"' for x in missing_cran]) + ")"
+            )
             r_build_script = f"""
 r <- getOption("repos")
 r["CRAN"] <- "{self.dockerator.cran_mirror}"
@@ -192,7 +210,7 @@ class BioConductorPackageInfo:
         all_deps = all_deps.difference(set(self.package_info["annotation"].keys()))
         all_deps = all_deps.difference(set(self.package_info["experiment"].keys()))
         cran_deps = all_deps.difference(set(self.package_info["software"].keys()))
-        bioc_deps = list(self.package_info['software'].keys())
+        bioc_deps = list(self.package_info["software"].keys())
         return bioc_deps, cran_deps
 
     @staticmethod
@@ -212,4 +230,3 @@ class BioConductorPackageInfo:
                     m.append(y[0])
             return m
         return []
-

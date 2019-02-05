@@ -1,9 +1,9 @@
-# mbf_dockerator
+# mbf_anysnake
 
 | Build status: | [![Build
-Status](https://travis-ci.com/TyberiusPrime/mbf_dockerator.svg?branch=master)](https://travis-ci.com/TyberiusPrime/mbf_dockerator)|
+Status](https://travis-ci.com/TyberiusPrime/mbf_anysnake.svg?branch=master)](https://travis-ci.com/TyberiusPrime/mbf_anysnake)|
 |---------------|-----------------------------------------------------------------------------|
-| Documentation | https://mbf_dockerator.readthedocs.io/en/latest/
+| Documentation | https://mbf_anysnake.readthedocs.io/en/latest/
 
 
 Wrap python versions, R versions, bioconductor installs,

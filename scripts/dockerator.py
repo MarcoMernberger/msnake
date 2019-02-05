@@ -1,13 +1,12 @@
-#!/home/finkernagel/upstream/dev/bin/python3
 import sys
 import pprint
 from pathlib import Path
 
 try:
-    from mbf_dockerator import parse_requirements, Dockerator
+    from mbf_anysnake import parse_requirements, Dockerator
 except ModuleNotFoundError:
     sys.path.append(str(Path(__file__).parent.parent / "src"))
-    from mbf_dockerator import parse_requirements, parsed_to_dockerator, Dockerator
+    from mbf_anysnake import parse_requirements, parsed_to_dockerator, Dockerator
 
 import click
 
