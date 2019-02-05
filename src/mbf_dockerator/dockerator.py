@@ -37,15 +37,18 @@ class Dockerator:
         python_version,
         bioconductor_version,
         r_version,
-        global_config,
-        local_config,
+        global_python_packages,
+            local_python_packages,
+            cran_packages,
         storage_path,
         code_path,
         cores=None,
-        cran_mirror="https://ftp.fau.de/cran/",  # https://cloud.r-project.org
+        cran_mirror="https://cloud.r-project.org"
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
+        if not self.cran_mirror.endswith('/'):
+            self.cran_mirror += '/'
 
         self.storage_path = Path(storage_path)
         if not self.storage_path.exists():
@@ -57,12 +60,10 @@ class Dockerator:
         self.docker_image = docker_image
         self.python_version = python_version
         self.bioconductor_version = bioconductor_version
-        self.global_venv_packages = self.annotate_packages(
-            global_config.get("python", [])
-        )
-        self.local_venv_packages = self.annotate_packages(
-            local_config.get("python", [])
-        )
+        self.global_python_packages = global_python_packages 
+        self.local_python_packages = local_python_packages 
+        self.cran_packages = cran_packages
+        
 
         self.paths = {
             "storage": storage_path,
@@ -106,6 +107,29 @@ class Dockerator:
         for k, v in self.paths.items():
             self.paths[k] = Path(v)
 
+    def pprint(self):
+        print("Dockerator")
+        print(f"  Python version={self.python_version}")
+        print(f"  R version={self.R_version}")
+        print(f"  Bioconductor version={self.bioconductor_version}")
+        print("")
+        print(f"  Storage path: {self.paths['storage']}")
+        print(f"  local code path: {self.paths['code']}")
+        print(f"  global logs in: {self.paths['log_storage']}")
+        print(f"  local logs in: {self.paths['log_code']}")
+        print('')
+        print('  Global python packages')
+        for entry in self.global_python_packages.items():
+            print(f"    {entry}")
+
+        print('  Local python packages')
+        for entry in self.local_python_packages.items():
+            print(f"    {entry}")
+
+        #Todo: cran
+        #todo: modularize into dockerfills
+
+
     def ensure(self):
         for s in self.strategies:
             s.ensure()
@@ -140,7 +164,9 @@ class Dockerator:
         container_result = client.containers.run(
             docker_image, "/bin/bash /opt/run.sh", **run_kwargs
         )
-        if log_name:
+        if hasattr(log_name, "write"):
+            log_name.write(container_result)
+        elif log_name:
             self.paths[log_name].write_bytes(container_result)
         return container_result
 
@@ -204,16 +230,16 @@ class Dockerator:
         """Augment parsed packages with method"""
         parsed_packages = parsed_packages.copy()
         for name, entry in parsed_packages.items():
-            if '/' in name:
+            if "/" in name:
                 raise ValueError("invalid name: %s" % name)
-            if not entry['version']:
-                entry['version'] = ''
-            if entry['version'].startswith("hg+https"):
+            if not entry["version"]:
+                entry["version"] = ""
+            if entry["version"].startswith("hg+https"):
                 entry["method"] = "hg"
-                entry["url"] = entry['version'][3:]
-            elif entry['version'].startswith("git+https"):
+                entry["url"] = entry["version"][3:]
+            elif entry["version"].startswith("git+https"):
                 entry["method"] = "hg"
-                entry["url"] = entry['version'][3:]
+                entry["url"] = entry["version"][3:]
             elif "/" in entry["version"]:
                 if "://" in entry["version"]:
                     raise ValueError("Could not interpret %s" % entry["version"])
