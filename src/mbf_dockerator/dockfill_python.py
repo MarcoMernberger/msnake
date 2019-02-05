@@ -1,4 +1,5 @@
 import requests
+import tempfile
 import re
 import os
 import subprocess
@@ -100,19 +101,7 @@ class _DockerFillVenv:
         self.create_venv()
         self.fill_venv()
 
-    def create_venv(self):
-        self.dockerator.build(
-            target_dir=self.target_path,
-            target_dir_inside_docker=self.target_path_inside_docker,
-            relative_check_filename=Path("bin") / "activate.fish",
-            log_name=f"log_{self.name}_venv",
-            additional_volumes=self.dockfill_python.volumes,
-            build_cmds=f"""
-{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
-echo "done"
-""",
-        )
-
+    
     def fill_venv(self):
         print("filling", self.name)
         code_packages = {
@@ -291,6 +280,19 @@ class DockFill_GlobalVenv(_DockerFillVenv):
         self.packages = self.dockerator.global_python_packages
         super().__init__()
 
+    def create_venv(self):
+        self.dockerator.build(
+            target_dir=self.target_path,
+            target_dir_inside_docker=self.target_path_inside_docker,
+            relative_check_filename=Path("bin") / "activate.fish",
+            log_name=f"log_{self.name}_venv",
+            additional_volumes=self.dockfill_python.volumes,
+            build_cmds=f"""
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
+echo "done"
+""",
+        )
+
 
 class DockFill_CodeVenv(_DockerFillVenv):
     def __init__(self, dockerator, dockfill_python):
@@ -308,9 +310,56 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.target_path = self.paths["code_venv"]
         self.target_path_inside_docker = self.paths["docker_code_venv"]
         self.dockfill_python = dockfill_python
-        self.volumes = {self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"]}
+        self.volumes = {
+            self.paths["code"]: dockerator.paths[f"docker_code"],
+            self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
+        }
         self.packages = self.dockerator.local_python_packages
         super().__init__()
+
+    def create_venv(self):
+        lib_code = (
+            Path(self.paths["docker_code_venv"])
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+        )
+        lib_storage = (
+            Path(self.paths["docker_storage_venv"])
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+        )
+        sc_file = str(lib_code / "site-packages" / "sitecustomize.py")
+
+        tf = tempfile.NamedTemporaryFile(suffix=".py", mode="w")
+        tf.write(
+            f"""
+import sys
+for x in [
+    '{lib_storage}/site-packages',
+    '{lib_code}/site-packages',
+    '{lib_code}',
+    ]:
+    if x in sys.path:
+        sys.path.remove(x)
+    sys.path.insert(0, x)
+"""
+        )
+        tf.flush()
+        additional_volumes = self.dockfill_python.volumes.copy()
+        additional_volumes[tf.name] = "/opt/sitecustomize.py"
+
+        self.dockerator.build(
+            target_dir=self.target_path,
+            target_dir_inside_docker=self.target_path_inside_docker,
+            relative_check_filename=Path("bin") / "activate.fish",
+            log_name=f"log_{self.name}_venv",
+            additional_volumes=additional_volumes,
+            build_cmds=f"""
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
+cp /opt/sitecustomize.py {sc_file}
+echo "done"
+""",
+        )
 
 
 def version_is_compatible(dep_def, version):

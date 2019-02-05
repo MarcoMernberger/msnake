@@ -109,7 +109,7 @@ def jupyter(no_build=False):
     print("Starting notebookt at %i" % host_port)
 
     d.run(
-        "jupyter notebook",
+        "jupyter notebook --ip=0.0.0.0 --no-browser",
         home_files=home_files,
         volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
