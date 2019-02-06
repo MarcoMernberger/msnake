@@ -46,10 +46,11 @@ class DockFill_Python:
             or (python_version >= "3.6.0")
             or (python_version >= "2.7.13")
         ):
-            ssl_lib = "libssl-dev"
+            # ssl_lib = "libssl-dev"
+            pass
         else:
             raise ValueError("Find a fix for old ssl lib")
-            ssl_lib = "libssl1.0-dev"
+            # ssl_lib = "libssl1.0-dev"
 
         self.dockerator.build(
             target_dir=self.paths["storage_python"],
@@ -180,7 +181,6 @@ class _DockerFillVenv:
                         )
         for name in missing_code:
             print("\tpip install -e", "/opt/code/" + name)
-            safe_name = name.replace("/", "_")
             log_key = f"log_{self.name}_venv_{name}"
             self.dockerator._run_docker(
                 f"""
@@ -280,7 +280,7 @@ class DockFill_GlobalVenv(_DockerFillVenv):
             self.paths["storage_venv"]: dockerator.paths[f"docker_storage_venv"]
         }
         self.packages = self.dockerator.global_python_packages
-        self.shell_path = str(Path(self.paths['docker_storage_venv']) / 'bin')
+        self.shell_path = str(Path(self.paths["docker_storage_venv"]) / "bin")
         super().__init__()
 
     def pprint(self):
@@ -323,7 +323,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
             self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
         }
         self.packages = self.dockerator.local_python_packages
-        self.shell_path = str(Path(self.paths['docker_code_venv']) / 'bin')
+        self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()
 
     def pprint(self):

@@ -37,7 +37,7 @@ class DockFill_R:
         r = requests.get(url).text
         if not f"R-{self.R_version}.tar.gz" in r:
             raise ValueError(
-                f("Unknown R version {self.R_version - check {url} for list")
+                (f"Unknown R version {self.R_version} - check {url} for list")
             )
 
     def ensure(self):
@@ -111,11 +111,11 @@ class DockFill_Rpy2:
             build_cmds=f"""
 
 export R_HOME={self.paths['docker_storage_r']}
-export PATH={self.paths['docker_storage_r']}/bin:$PATH 
+export PATH={self.paths['docker_storage_r']}/bin:$PATH
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_storage_rpy2']}
 cd /root
 {self.paths['docker_storage_rpy2']}/bin/pip3 download rpy2
-#this might not be enough later on, if rpy2 gains a version that is 
+#this might not be enough later on, if rpy2 gains a version that is
 # dependend on something we don't get as a wheel
 {self.paths['docker_storage_rpy2']}/bin/pip3 install *.whl
 tar xf rpy2-*.tar.gz

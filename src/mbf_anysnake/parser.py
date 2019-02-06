@@ -1,9 +1,9 @@
 # -*- coding: future_fstrings -*-
 import re
-import pprint
 from pathlib import Path
 from .dockerator import Dockerator
 import tomlkit
+
 
 def merge_config(d1, d2):
     result = d1.copy()
@@ -15,22 +15,20 @@ def merge_config(d1, d2):
     return result
 
 
-
-
 def parse_requirements(req_file):
-    """Parse the requirements from a anysnake.toml file 
+    """Parse the requirements from a anysnake.toml file
     See readme.
-    
+
     """
     used_files = [req_file]
     with open(req_file) as op:
         p = tomlkit.loads(op.read())
-    if 'base' in p and 'global_config' in p['base']:
-        with open(p['base']['global_config']) as op:
+    if "base" in p and "global_config" in p["base"]:
+        with open(p["base"]["global_config"]) as op:
             gconfig = tomlkit.loads(op.read())
-            used_files.insert(0, p['base']['global_config'])
+            used_files.insert(0, p["base"]["global_config"])
             p = merge_config(gconfig, p)
-    p['used_files'] = used_files
+    p["used_files"] = used_files
     return p
 
 
@@ -108,10 +106,13 @@ def check_pip_definitions(defs):
                 f"Python package name did not match PEP-0508 Names regexps: {k}"
             )
         if v and v[0] != "@":
-            operators = ['<=', '<', '!=', '==', '>=', '>', '~=', '===']
-            r = r'^(' + "|".join(operators) + r')?([A-Za-z0-9_.*+!-]+)'
+            operators = ["<=", "<", "!=", "==", ">=", ">", "~=", "==="]
+            r = r"^(" + "|".join(operators) + r")?([A-Za-z0-9_.*+!-]+)"
             if not re.match(r, v):
-                raise ValueError(f"Invalid version specification '{k}' = '{v}' - See PEP-0508")
-            if '/' in v:
-                raise ValueError(f"Invalid version specification - urls must start with @: '{k}' = '{v}' ")
-
+                raise ValueError(
+                    f"Invalid version specification '{k}' = '{v}' - See PEP-0508"
+                )
+            if "/" in v:
+                raise ValueError(
+                    f"Invalid version specification - urls must start with @: '{k}' = '{v}' "
+                )
