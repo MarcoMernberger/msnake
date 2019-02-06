@@ -5,11 +5,7 @@ from docker import from_env as docker_from_env
 import time
 import tempfile
 import shutil
-import requests
 import subprocess
-import re
-import pprint
-import packaging.version
 import os
 import multiprocessing
 
@@ -29,7 +25,7 @@ class Dockerator:
     global and local venvs (including 'code')
 
     bioconductor_version can be set to None, then no bioconductor is installed,
-    R_version can be set to None, then no (if bioconductor == None) or the 
+    R_version can be set to None, then no (if bioconductor == None) or the
         matching R version for the bioconductor is being installed.
     If bioconductor_version is set, R_version must not be set.
 
@@ -212,8 +208,6 @@ class Dockerator:
         self, bash_script, run_kwargs, log_name, root=False, append_to_log=False
     ):
         docker_image = self.docker_image
-        run_kwargs["stdout"] = True
-        run_kwargs["stderr"] = True
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
         volumes = {tf.name: "/opt/run.sh"}
@@ -231,18 +225,21 @@ class Dockerator:
             run_kwargs["user"] = "%i:%i" % (os.getuid(), os.getgid())
         tf.write(bash_script)
         tf.flush()
-        container_result = client.containers.run(
+        container = client.containers.create(
             docker_image, "/bin/bash /opt/run.sh", **run_kwargs
         )
+        try:
+            container.start()
+            container.wait()
+        except KeyboardInterrupt:
+            container.kill()
+        container_result = container.logs(stdout=True, stderr=True)
+
         if hasattr(log_name, "write"):
             log_name.write(container_result)
         elif log_name:
             if append_to_log:
-                if not self.paths[log_name].exist():
-                    mode = 'wb'
-                else:
-                    mode = 'ab'
-                with open(self.paths[log_name], mode) as op:
+                with open(str(self.paths[log_name]), "ab") as op:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)

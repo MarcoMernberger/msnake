@@ -1,7 +1,6 @@
-import sys
 import click
 from pathlib import Path
-from mbf_anysnake import parse_requirements, parsed_to_dockerator, Dockerator
+from mbf_anysnake import parse_requirements, parsed_to_dockerator
 
 
 config_file = "anysnake.toml"

@@ -1,4 +1,4 @@
-# -*- coding: future_fstrings -*-
+# *- coding: future_fstrings -*-
 
 import requests
 import time
@@ -6,31 +6,20 @@ import shutil
 from pathlib import Path
 import tempfile
 import re
-import functools
 
 from .util import combine_volumes
 
 
-class lazy_property(object):
-    """
-    meant to be used for lazy evaluation of an object attribute.
-    property should represent non-mutable data, as it replaces itself.
-    """
-
-    def __init__(self, fget):
-        self.fget = fget
-
-        # copy the getter function's docstring and other attributes
-        functools.update_wrapper(self, fget)
-
-    def __get__(self, obj, cls):
-        # if obj is None: # this was in the original recepie, but I don't see
-        # when it would be called?
-        # return self
-
-        value = self.fget(obj)
-        setattr(obj, self.fget.__name__, value)
-        return value
+def chunks(iter, n):
+    # For item i in a range that is a length of l,
+    col = []
+    for i in iter:
+        col.append(i)
+        if len(col) == n:
+            yield col
+            col = []
+    if col:
+        yield col
 
 
 class DockFill_Bioconductor:
@@ -117,7 +106,6 @@ class DockFill_Bioconductor:
                 continue
             release = re.findall(r">(\d+\.\d+)<", block)
             if len(release) != 1:
-                print(release)
                 raise ValueError(
                     "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
                 )
@@ -144,7 +132,7 @@ class DockFill_Bioconductor:
     def bioconductor_relase_information(cls, dockerator):
         """Fetch the information, annotate it with a viable minor release,
         and cache the results.
-        
+
         Sideeffect: inside one storeage, R does not get minor releases
         with out a change in Bioconductor Version.
 
@@ -228,23 +216,18 @@ class DockFill_Bioconductor:
             packages_to_fetch = self.expand_dependencies(packages_to_fetch, all_deps)
             # packages_to_fetch now dict of name -> dependencies
             data_packages = set(
-                # pkg_info["annotation"].keys() |
-                pkg_info["experiment"].keys()
+                pkg_info["annotation"].keys() | pkg_info["experiment"].keys()
             )
             packages_needing_pruning = {
                 pkg: deps.intersection(data_packages)
                 for (pkg, deps) in packages_to_fetch.items()
                 if deps.intersection(data_packages)
             }
-            print(len(packages_needing_pruning))
-            import pprint
-
-            pprint.pprint(packages_needing_pruning)
+            print("no. Packages that might need pruning", len(packages_needing_pruning))
 
             installed = self.list_installed()
             # packages to fetch now set again
 
-            print("Biobase" in packages_to_fetch)
             fetch_order = self.apply_topological_order(
                 sorted(packages_to_fetch), all_deps
             )
@@ -303,10 +286,10 @@ class DockFill_Bioconductor:
             nodes_by_name[n] = Node(n)
         for n in packages:
             deps = all_dependencies[n]
-            for d in deps:
+            for d in sorted(deps):
                 try:
                     nodes_by_name[n].depends_on(nodes_by_name[d])
-                except:
+                except KeyError:
                     print(n, d)
                     raise ValueError()
 
@@ -336,59 +319,70 @@ class DockFill_Bioconductor:
             download_file(info["url"], fn)
 
     def install_packages(self, packages):
-        filenames = [
-            "%s/%s/%s_%s.tar.gz"
-            % (
-                self.paths["docker_storage_bioconductor_download"],
-                info["repo"],
-                name,
-                info["version"],
-            )
-            for name, info in packages
-        ]
-        filenames = filenames[:10]
-        file_vector = "c(" + ",".join([f"'{x}'" for x in filenames]) + ")"
-        r_build_script = f"""
-        r <- getOption("repos")
-        r["CRAN"] <- "{self.dockerator.cran_mirror}"
-        options(repos=r)
-
-        lib = "{self.paths['docker_storage_bioconductor']}"
-        .libPaths(c(lib, .libPaths()))
-        install.packages({file_vector}, 
-        lib=lib, 
-        Ncpus={self.dockerator.cores}, 
-        repos=NULL,
-        type='source',
-        keep_outputs = '{self.paths['docker_storage_bioconductor']}/outputs'
-        )
-        
-        """
-        bash_script = f"""
-        {self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R 
-        """
-        r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
-        r_build_file.write(r_build_script)
-        r_build_file.flush()
-
-        self.dockerator._run_docker(
-            bash_script,
-            {
-                "volumes": combine_volumes(
-                    ro=[
-                        self.dockfill_r.volumes,
-                        {
-                            self.paths["storage_bioconductor_download"]: self.paths[
-                                "docker_storage_bioconductor_download"
-                            ]
-                        },
-                    ],
-                    rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
+        count = 0
+        chunk_size = self.dockerator.cores * 2
+        for sub in chunks(packages, chunk_size):
+            print("installing bioconductor packages: ", [x[0] for x in sub])
+            remaining = len(packages) - count
+            count += chunk_size
+            print("%i to go afterwards" % remaining)
+            filenames = [
+                "%s/%s/%s_%s.tar.gz"
+                % (
+                    self.paths["docker_storage_bioconductor_download"],
+                    info["repo"],
+                    name,
+                    info["version"],
                 )
-            },
-            "log_bioconductor",
-            append_to_log=True,
-        )
+                for name, info in sub
+            ]
+
+            file_vector = "c(" + ",".join([f"'{x}'" for x in filenames]) + ")"
+            r_build_script = f"""
+            r <- getOption("repos")
+            r["CRAN"] <- "{self.dockerator.cran_mirror}"
+            options(repos=r)
+
+            lib = "{self.paths['docker_storage_bioconductor']}"
+            .libPaths(c(lib, .libPaths()))
+            install.packages({file_vector},
+            lib=lib,
+            repos=NULL,
+            type='source',
+            install_opts = c('--no-docs', '--no-multiarch')
+            )
+
+            """
+            bash_script = f"""
+            export MAKE_OPTS="-j{self.dockerator.cores}"
+            export MAKE="make -j{self.dockerator.cores}"
+            {self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R
+            echo "done running R$?"
+            """
+            print(r_build_script)
+            r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
+            r_build_file.write(r_build_script)
+            r_build_file.flush()
+
+            self.dockerator._run_docker(
+                bash_script,
+                {
+                    "volumes": combine_volumes(
+                        ro=[
+                            self.dockfill_r.volumes,
+                            {
+                                self.paths["storage_bioconductor_download"]: self.paths[
+                                    "docker_storage_bioconductor_download"
+                                ]
+                            },
+                        ],
+                        rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
+                    )
+                },
+                "log_bioconductor",
+                append_to_log=True,
+            )
+            break
 
     def list_installed(self):
         return set(
@@ -477,7 +471,6 @@ class RPackageInfo:
                 key = m.groups()[0]
                 value = line[line.find(":") + 2 :].strip()
                 if key == "Package":
-                    print(value)
                     if current:
                         result.append(current)
                         current = {}
@@ -509,10 +502,11 @@ def download_file(url, filename):
         if r.status_code != 200:
             raise ValueError(f"Error return on {url} {r.status_code}")
         start = time.time()
+        count = 0
         with open(str(filename) + "_temp", "wb") as op:
             for block in r.iter_content(1024 * 1024):
                 op.write(block)
                 count += len(block)
-        shutil.move(str(filename) + "_temp", filename)
+        shutil.move(str(filename) + "_temp", str(filename))
         stop = time.time()
         print("Rate: %.2f MB/s" % ((count / 1024 / 1024 / (stop - start))))
