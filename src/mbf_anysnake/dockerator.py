@@ -89,9 +89,7 @@ class Dockerator:
             dfr = DockFill_R(self)
         else:
             if self.bioconductor_version:
-                self.R_version = DockFill_Bioconductor.find_r_from_bioconductor(
-                    self, self.bioconductor_version
-                )
+                self.R_version = DockFill_Bioconductor.find_r_from_bioconductor(self)
                 dfr = DockFill_R(self)
             else:
                 self.R_version = None
@@ -183,7 +181,7 @@ class Dockerator:
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
         for s in self.strategies:
-            if hasattr(s, 'shell_envs'):
+            if hasattr(s, "shell_envs"):
                 env.update(s.shell_envs)
         for key, value in env.items():
             cmd.append("-e")
@@ -208,7 +206,9 @@ class Dockerator:
         p = subprocess.Popen(cmd)
         p.communicate()
 
-    def _run_docker(self, bash_script, run_kwargs, log_name, root=False):
+    def _run_docker(
+        self, bash_script, run_kwargs, log_name, root=False, append_to_log=False
+    ):
         docker_image = self.docker_image
         run_kwargs["stdout"] = True
         run_kwargs["stderr"] = True
@@ -235,7 +235,11 @@ class Dockerator:
         if hasattr(log_name, "write"):
             log_name.write(container_result)
         elif log_name:
-            self.paths[log_name].write_bytes(container_result)
+            if append_to_log:
+                with open(self.paths[log_name], "ab") as op:
+                    op.write(container_result)
+            else:
+                self.paths[log_name].write_bytes(container_result)
         return container_result
 
     def build(

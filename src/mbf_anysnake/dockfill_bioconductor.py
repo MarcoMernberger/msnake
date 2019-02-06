@@ -1,8 +1,34 @@
 import requests
+import time
+import shutil
 from pathlib import Path
 import tempfile
 import re
+import functools
+
 from .util import combine_volumes
+
+
+class lazy_property(object):
+    """
+    meant to be used for lazy evaluation of an object attribute.
+    property should represent non-mutable data, as it replaces itself.
+    """
+
+    def __init__(self, fget):
+        self.fget = fget
+
+        # copy the getter function's docstring and other attributes
+        functools.update_wrapper(self, fget)
+
+    def __get__(self, obj, cls):
+        # if obj is None: # this was in the original recepie, but I don't see
+        # when it would be called?
+        # return self
+
+        value = self.fget(obj)
+        setattr(obj, self.fget.__name__, value)
+        return value
 
 
 class DockFill_Bioconductor:
@@ -17,6 +43,17 @@ class DockFill_Bioconductor:
                     self.paths["storage"] / "bioconductor" / self.bioconductor_version
                 ),
                 "docker_storage_bioconductor": "/dockerator/bioconductor",
+                "storage_bioconductor_download": (
+                    self.paths["storage"]
+                    / "bioconductor_download"
+                    / self.bioconductor_version
+                ),
+                "docker_storage_bioconductor_download": (
+                    str(
+                        Path("/dockerator/bioconductor_download")
+                        / self.bioconductor_version
+                    )
+                ),
                 "log_bioconductor": (
                     self.paths["log_storage"]
                     / f"dockerator.bioconductor.{self.bioconductor_version}.log"
@@ -33,14 +70,23 @@ class DockFill_Bioconductor:
             ]
         }
 
+    def pprint(self):
+        print(f"  Bioconductor version={self.bioconductor_version}")
+
     @staticmethod
-    def get_bioconductor_r_pairs():
-        pairs = {}
+    def fetch_bioconductor_release_information():
+        import maya
+
         url = "https://bioconductor.org/about/release-announcements/"
         bc = requests.get(url).text
         tbody = bc[
             bc.find("<tbody>") : bc.find("</tbody>")
         ]  # at least for now it's the first table on the page
+        if not ">3.8<" in tbody:
+            raise ValueError(
+                "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
+            )
+        info = {}
         for block in tbody.split("</tr>"):
             bc_versions = re.findall(r"/packages/(\d+.\d+)/", block)
             if bc_versions:
@@ -51,182 +97,420 @@ class DockFill_Bioconductor:
                     )
                 r_version = r_version[0]
                 for b in bc_versions:
-                    pairs[b] = r_version
-        return pairs
+                    if b in info:
+                        raise ValueError(
+                            "Unexpected double information for bc relase %s? Check scraping code"
+                            % bc
+                        )
+                    info[b] = {"r_major_version": r_version}
+
+        if not '"release-announcements"' in bc:
+            raise ValueError(
+                "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
+            )
+        ra_offset = bc.find("release-announcements")
+        tbody = bc[bc.find("<tbody>", ra_offset) : bc.find("</tbody>", ra_offset)]
+        for block in tbody.split("</tr>"):
+            if not "href" in block:  # old relases no longer available
+                continue
+            release = re.findall(r">(\d+\.\d+)<", block)
+            if len(release) != 1:
+                print(release)
+                raise ValueError(
+                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
+                )
+            pckg_count = re.findall(r">(\d+)<", block)
+            if len(pckg_count) != 1:
+                raise ValueError(
+                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
+                )
+            date = re.findall(r">([A-Z][a-z]+[0-9 ,]+)<", block)
+            if len(date) != 1:
+                raise ValueError(
+                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
+                )
+            release = release[0]
+            pckg_count = pckg_count[0]
+            date = maya.parse(date[0])
+            date = date.rfc3339()
+            date = date[: date.find("T")]
+            info[release]["date"] = date
+            info[release]["pckg_count"] = pckg_count
+        return info
 
     @classmethod
-    def find_r_from_bioconductor(cls, dockerator, bioconductor_version):
+    def bioconductor_relase_information(cls, dockerator):
+        """Fetch the information, annotate it with a viable minor release,
+        and cache the results.
+        
+        Sideeffect: inside one storeage, R does not get minor releases
+        with out a change in Bioconductor Version.
+
+        Guess you can overwrite R_version in your configuration file.
+        """
+        import tomlkit
+
         dockerator.paths.update(
             {
-                "storage_bioconductor_r_version": (
+                "storage_bioconductor_release_info": (
                     dockerator.paths["storage"]
-                    / "bioconductor_r_version"
-                    / bioconductor_version
+                    / "bioconductor_release_info"
+                    / dockerator.bioconductor_version
                 )
             }
         )
-        cache_file = dockerator.paths["storage_bioconductor_r_version"]
+        cache_file = dockerator.paths["storage_bioconductor_release_info"]
         if not cache_file.exists():
             cache_file.parent.mkdir(exist_ok=True, parents=True)
-            pairs = cls.get_bioconductor_r_pairs()
-            if not bioconductor_version in pairs:
+            all_info = cls.fetch_bioconductor_release_information()
+            if not dockerator.bioconductor_version in all_info:
                 raise ValueError(
-                    f"Could not find bioconductor {bioconductor_version } - check https://bioconductor.org/about/release-announcements/"
+                    f"Could not find bioconductor {dockerator.bioconductor_version } - check https://bioconductor.org/about/release-announcements/"
                 )
-            major = pairs[bioconductor_version]
-            # chosen = major + '.0'
-            if True:
-                # this is very nice, but simply wrong - 3.8 does not work with R 3.5.2 e.g.
-                # now we now 3.x - but we don't know 3.x.y
-                url = dockerator.cran_mirror + "src/base/R-" + major[0]
-                r = requests.get(url).text
-                available = re.findall("R-(" + major + r"\.\d+).tar.gz", r)
-                matching = [x for x in available if x.startswith(major)]
-                by_minor = [(re.findall(r"\d+.\d+.(\d+)", x), x) for x in matching]
-                by_minor.sort()
-                chosen = by_minor[-1][1]
-            cache_file.write_text(chosen)
-        return cache_file.read_text()
+            info = all_info[dockerator.bioconductor_version]
+            major = info["r_major_version"]
+            url = dockerator.cran_mirror + "src/base/R-" + major[0]
+            r = requests.get(url).text
+            available = re.findall("R-(" + major + r"\.\d+).tar.gz", r)
+            matching = [x for x in available if x.startswith(major)]
+            by_minor = [(re.findall(r"\d+.\d+.(\d+)", x), x) for x in matching]
+            by_minor.sort()
+            chosen = by_minor[-1][1]
+            info["r_version"] = chosen
+            cache_file.write_text(tomlkit.dumps(info))
+        raw = cache_file.read_text()
+        return tomlkit.loads(raw)
+
+    @classmethod
+    def find_r_from_bioconductor(cls, dockerator):
+        return cls.bioconductor_relase_information(dockerator)["r_version"]
 
     def check_r_bioconductor_match(self):
-        pairs = self.get_bioconductor_r_pairs()
-        major = pairs[self.dockerator.bioconductor_version]
+        info = self.get_bioconductor_release_information()
+        major = info["r_major_version"]
         if not self.dockerator.R_version.startswith(major):
             raise ValueError(
                 f"bioconductor {self.bioconductor_version} requires R {major}.*, but you requested {self.R_version}"
             )
 
-    def list_available_bc_packages(self):
-        import json
-
-        install_list_file = (
-            self.paths["storage_bioconductor"] / "should_be_installed.txt"
-        )
-        if not install_list_file.exists():
-            c = BioConductorPackageInfo(self.bioconductor_version)
-            c.load()
-            bioc, cran = c.get_bioc_and_cran_deps()
-            install_list_file.write_text(json.dumps([list(bioc), list(cran)]))
-        return json.loads(install_list_file.read_text())
-
-    def list_installed(self):
-        return [x.name for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()]
-
     def ensure(self):
-        self.check_r_bioconductor_match()
-        self.paths["storage_bioconductor"].mkdir(exist_ok=True, parents=True)
-        to_install_bioc, to_install_cran = self.list_available_bc_packages()
+        done_file = self.paths["storage_bioconductor"] / "done.txt"
+        if not done_file.exists():
+            info = self.bioconductor_relase_information(self.dockerator)
+            # bioconductor can really only be reliably installed with the CRAN
+            # packages against which it was developed
+            # arguably, that's an illdefined problem
+            # but we'll go with "should've worked at the release date at least"
+            # for now
+            # Microsoft's snapshotted cran mirror to the rescue
 
-        installed = set(
-            self.list_installed()
+            mran_url = f"https://cran.microsoft.com/snapshot/{info['date']}/"
+
+            urls = {
+                "software": f"https://bioconductor.org/packages/{self.bioconductor_version}/bioc/",
+                "annotation": f"https://bioconductor.org/packages/{self.bioconductor_version}/data/annotation/",
+                "experiment": f"https://bioconductor.org/packages/{self.bioconductor_version}/data/experiment/",
+                "cran": mran_url,
+            }
+            for k in urls:
+                (self.paths["storage_bioconductor_download"] / k).mkdir(exist_ok=True)
+            pkg_info = {
+                k: RPackageInfo(urls[k], k, self.paths["storage_bioconductor"]).get()
+                for k in urls
+            }
+            dep_fields = ["depends", "imports"]
+
+            packages_to_fetch = set(pkg_info["software"].keys())
+            all_packages = set.union(*[set(info.keys()) for info in pkg_info.values()])
+            all_deps = self.get_dependencies(all_packages, pkg_info, dep_fields)
+            packages_to_fetch = self.expand_dependencies(packages_to_fetch, all_deps)
+            # packages_to_fetch now dict of name -> dependencies
+            data_packages = set(
+                # pkg_info["annotation"].keys() |
+                pkg_info["experiment"].keys()
+            )
+            packages_needing_pruning = {
+                pkg: deps.intersection(data_packages)
+                for (pkg, deps) in packages_to_fetch.items()
+                if deps.intersection(data_packages)
+            }
+            print(len(packages_needing_pruning))
+            import pprint
+
+            pprint.pprint(packages_needing_pruning)
+
+            installed = self.list_installed()
+            # packages to fetch now set again
+
+            print("Biobase" in packages_to_fetch)
+            fetch_order = self.apply_topological_order(
+                sorted(packages_to_fetch), all_deps
+            )
+            fetch_order = [x for x in fetch_order if x not in installed][::-1]
+
+            order_plus_info = [
+                (pkg, self.find_info(pkg_info, pkg)) for pkg in fetch_order
+            ]
+            (self.paths["storage_bioconductor"] / "order").write_text(
+                "\n".join([x[0] for x in order_plus_info])
+            )
+            self.download_packages(order_plus_info)
+            self.install_packages(order_plus_info)
+
+    def find_info(self, pkg_info, pkg):
+        for i in pkg_info.values():
+            if pkg in i:
+                return i[pkg]
+        raise KeyError(pkg)
+
+    def get_dependencies(self, packages, pkg_info, dep_fields):
+        result = {}
+        for p in packages:
+            for i in pkg_info.values():
+                if p in i:
+                    result[p] = set()
+                    for f in dep_fields:
+                        result[p].update(i[p][f])
+        return result
+
+    def expand_dependencies(self, packages, all_dependencies):
+        deps = {}
+        stack = list(packages)
+        while stack:
+            pkg = stack.pop()
+            pkg_deps = all_dependencies[pkg]
+            deps[pkg] = pkg_deps
+            for d in pkg_deps:
+                if not d in deps:
+                    stack.append(d)
+        return deps
+
+    def apply_topological_order(self, packages, all_dependencies):
+        class Node:
+            def __init__(self, name):
+                self.name = name
+                self.prerequisites = []
+                self.dependants = []
+
+            def depends_on(self, other_node):
+                self.prerequisites.append(other_node)
+                other_node.dependants.append(self)
+
+        nodes_by_name = {}
+        for n in packages:
+            nodes_by_name[n] = Node(n)
+        for n in packages:
+            deps = all_dependencies[n]
+            for d in deps:
+                try:
+                    nodes_by_name[n].depends_on(nodes_by_name[d])
+                except:
+                    print(n, d)
+                    raise ValueError()
+
+        for ii, job in enumerate(nodes_by_name.values()):
+            job.dependants_copy = job.dependants.copy()
+        list_of_jobs = list(nodes_by_name.values())
+
+        L = []
+        S = [job for job in list_of_jobs if len(job.dependants_copy) == 0]
+        S.sort(key=lambda job: job.prio if hasattr(job, "prio") else 0)
+        while S:
+            n = S.pop()
+            L.append(n)
+            for m in n.prerequisites:
+                m.dependants_copy.remove(n)
+                if not m.dependants_copy:
+                    S.append(m)
+        return [n.name for n in L]
+
+    def download_packages(self, pkg_plus_info):
+        for pkg, info in pkg_plus_info:
+            fn = (
+                self.paths["storage_bioconductor_download"]
+                / info["repo"]
+                / f"{pkg}_{info['version']}.tar.gz"
+            )
+            download_file(info["url"], fn)
+
+    def install_packages(self, packages):
+        filenames = [
+            "%s/%s/%s_%s.tar.gz"
+            % (
+                self.paths["docker_storage_bioconductor_download"],
+                info["repo"],
+                name,
+                info["version"],
+            )
+            for name, info in packages
+        ]
+        filenames = filenames[:10]
+        file_vector = "c(" + ",".join([f"'{x}'" for x in filenames]) + ")"
+        r_build_script = f"""
+        r <- getOption("repos")
+        r["CRAN"] <- "{self.dockerator.cran_mirror}"
+        options(repos=r)
+
+        lib = "{self.paths['docker_storage_bioconductor']}"
+        .libPaths(c(lib, .libPaths()))
+        install.packages({file_vector}, 
+        lib=lib, 
+        Ncpus={self.dockerator.cores}, 
+        repos=NULL,
+        type='source',
+        keep_outputs = '{self.paths['docker_storage_bioconductor']}/outputs'
         )
-        missing_cran = [x for x in to_install_cran if not x in installed]
-        missing_bioc = [x for x in to_install_bioc if not x in installed]
-
-        if missing_cran or missing_bioc:
-            msg = f"missing {len(missing_bioc)} bioconductor packages, {len(missing_cran)} cran packages"
-            print(msg)
-            Path(self.paths["log_bioconductor.todo"]).write_text(msg + "\n" + 
-                                                                 str(missing_bioc) + "\n"
-                                                                 str(missing_cran) + "\n"
-                                                                 )
-            bioc_package_vector = (
-                "c(" + ", ".join([f'"{x}"' for x in missing_bioc]) + ")"
-            )
-            cran_package_vector = (
-                "c(" + ", ".join([f'"{x}"' for x in missing_cran]) + ")"
-            )
-            r_build_script = f"""
-r <- getOption("repos")
-r["CRAN"] <- "{self.dockerator.cran_mirror}"
-options(repos=r)
-
-lib = "{self.paths['docker_storage_bioconductor']}"
-.libPaths(c(lib, .libPaths()))
-if (!requireNamespace("BiocManager"))
-    install.packages("BiocManager", lib=lib, Ncpus={self.dockerator.cores})
-    
-print("installing cran")
-install.packages({cran_package_vector}, lib=lib, Ncpus={self.dockerator.cores}, dependencies=T)
-    
-print("installing bioc")
-BiocManager::install({bioc_package_vector}, lib=lib, Ncpus={self.dockerator.cores}, dependencies=F)
-"""
-            bash_script = f"""
-{self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R 
-"""
-            r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
-            r_build_file.write(r_build_script)
-            r_build_file.flush()
-
-            self.dockerator._run_docker(
-                bash_script,
-                {
-                    "volumes": combine_volumes(
-                        ro=[self.dockfill_r.volumes],
-                        rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
-                    )
-                },
-                "log_bioconductor",
-            )
-
-
-class BioConductorPackageInfo:
-    """An interface to bioconductors PACKAGES
-    information - used to calculate what to install
-    """
-
-    def __init__(self, version):
-        self.urls = {
-            "software": f"https://bioconductor.org/packages/{version}/bioc/src/contrib/PACKAGES",
-            "annotation": f"https://bioconductor.org/packages/{version}/data/annotation/src/contrib/PACKAGES",
-            "experiment": f"https://bioconductor.org/packages/{version}/data/experiment/src/contrib/PACKAGES",
-        }
-
-    def load(self):
-        self.package_info = {}
-        for key, url in self.urls.items():
-            raw = requests.get(url).text
-            raw = re.split("^Package: ", raw, flags=re.MULTILINE)[1:]
-            pkgs = {}
-            for r in raw:
-                name = r[: r.find("\n")]
-                deps = self.by_tag(r, "Depends")
-                suggests = self.by_tag(r, "Suggests")
-                imports = self.by_tag(r, "Imports")
-                pkgs[name] = {"depends": deps, "suggests": suggests, "imports": imports}
-            self.package_info[key] = pkgs
-
-    def get_bioc_and_cran_deps(self):
-        """What is the bare minimum to install from bioconductor and cran?
-        result is (bioc_packages, non_bioc_packages), which the later being presumably
-        cran 
-        bioc_packages is in topological order, ready to install
         
         """
-        all_deps = set()
-        for r in self.package_info["software"].values():
-            all_deps.update(r["depends"])
-        all_deps = all_deps.difference(set(self.package_info["annotation"].keys()))
-        all_deps = all_deps.difference(set(self.package_info["experiment"].keys()))
-        cran_deps = all_deps.difference(set(self.package_info["software"].keys()))
-        bioc_deps = list(self.package_info["software"].keys())
-        return bioc_deps, cran_deps
+        bash_script = f"""
+        {self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R 
+        """
+        r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
+        r_build_file.write(r_build_script)
+        r_build_file.flush()
 
-    @staticmethod
-    def by_tag(r, tag):
-        if "\n" + tag in r:
-            r = r[r.find("\n" + tag) + len(tag) + 3 :]
-            if "\n" in r:
-                r = r[: r.find("\n")]
-            r = re.split(", ?", r)
-            r = [x.strip() for x in r]
-            m = []
-            for x in r:
-                if x.strip():
-                    y = re.findall("^[^ ()]+", x)
-                    if not y:
-                        raise ValueError(x)
-                    m.append(y[0])
-            return m
-        return []
+        self.dockerator._run_docker(
+            bash_script,
+            {
+                "volumes": combine_volumes(
+                    ro=[
+                        self.dockfill_r.volumes,
+                        {
+                            self.paths["storage_bioconductor_download"]: self.paths[
+                                "docker_storage_bioconductor_download"
+                            ]
+                        },
+                    ],
+                    rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
+                )
+            },
+            "log_bioconductor",
+            append_to_log=True,
+        )
+
+    def list_installed(self):
+        return set(
+            [x.name for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()]
+        )
+
+
+class RPackageInfo:
+    """Caching parser for CRAN style packages lists"""
+
+    build_in = {
+        "R",
+        "base",
+        "boot",
+        "class",
+        "cluster",
+        "codetools",
+        "compiler",
+        "datasets",
+        "foreign",
+        "graphics",
+        "grDevices",
+        "grid",
+        "KernSmooth",
+        "lattice",
+        "MASS",
+        "Matrix",
+        "methods",
+        "mgcv",
+        "nlme",
+        "nnet",
+        "parallel",
+        "rpart",
+        "spatial",
+        "splines",
+        "stats",
+        "stats4",
+        "survival",
+        "tcltk",
+        "tools",
+        "utils",
+    }
+
+    def __init__(self, base_url, name, cache_path):
+        self.name = name
+        self.base_url = base_url
+        if not self.base_url.endswith("/"):
+            self.base_url += "/"
+        self.cache_filename = cache_path / (self.name + ".PACKAGES")
+
+    def get(self):
+        """Return a dictionary:
+        package -> depends, imports, suggests, version
+        """
+        if not hasattr(self, "_packages"):
+            if not self.cache_filename.exists():
+                full_url = self.base_url + "src/contrib/PACKAGES"
+                download_file(full_url, self.cache_filename)
+            raw = self.cache_filename.read_text()
+            pkgs = {}
+            for p in self.parse(raw):
+                name = p["Package"]
+                deps = set(p["Depends"]) - self.build_in
+                suggests = set(p["Suggests"]) - self.build_in
+                imports = set(p["Imports"]) - self.build_in
+                version = p["Version"]
+                version = version if version else ""
+                pkgs[name] = {
+                    "depends": deps,
+                    "suggests": suggests,
+                    "imports": imports,
+                    "version": version,
+                    "url": f"{self.base_url}src/contrib/{name}_{version}.tar.gz",
+                    "repo": self.name,
+                }
+            self._packages = pkgs
+        return self._packages
+
+    def parse(self, raw):
+        lines = raw.split("\n")
+        result = []
+        current = {}
+        for line in lines:
+            m = re.match("([A-Za-z0-9]+):", line)
+            if m:
+                key = m.groups()[0]
+                value = line[line.find(":") + 2 :].strip()
+                if key == "Package":
+                    print(value)
+                    if current:
+                        result.append(current)
+                        current = {}
+                if key in current:
+                    raise ValueError(key)
+                current[key] = value
+            elif line.strip():
+                current[key] += line.strip()
+
+        if current:
+            result.append(current)
+        for current in result:
+            for k in ["Depends", "Imports", "Suggests", "LinkingTo"]:
+                if k in current:
+                    current[k] = re.split(", ?", current[k].strip())
+                    current[k] = set(
+                        [re.findall("^[^ ()]+", x)[0] for x in current[k] if x]
+                    )
+                else:
+                    current[k] = set()
+        return result
+
+
+def download_file(url, filename):
+    """Download a file with requests if the target does not exist yet"""
+    if not Path(filename).exists():
+        print("downloading", url, filename)
+        r = requests.get(url, stream=True)
+        if r.status_code != 200:
+            raise ValueError(f"Error return on {url} {r.status_code}")
+        start = time.time()
+        with open(str(filename) + "_temp", "wb") as op:
+            for block in r.iter_content(1024 * 1024):
+                op.write(block)
+                count += len(block)
+        shutil.move(str(filename) + "_temp", filename)
+        stop = time.time()
+        print("Rate: %.2f MB/s" % ((count / 1024 / 1024 / (stop - start))))
