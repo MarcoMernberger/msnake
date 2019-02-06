@@ -1,17 +1,11 @@
 import sys
-import pprint
-from pathlib import Path
-
-try:
-    from mbf_anysnake import parse_requirements, Dockerator
-except ModuleNotFoundError:
-    sys.path.append(str(Path(__file__).parent.parent / "src"))
-    from mbf_anysnake import parse_requirements, parsed_to_dockerator, Dockerator
-
 import click
+from pathlib import Path
+from mbf_anysnake import parse_requirements, parsed_to_dockerator, Dockerator
+
 
 config_file = "anysnake.toml"
-home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", '.jupyter']
+home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", ".jupyter"]
 
 
 @click.group()
@@ -116,10 +110,10 @@ def jupyter(no_build=False):
 
 @main.command()
 def show_config():
-    """Print the config as understood by the parser from anysnake.toml"""
+    """Print the config as it is actually used"""
     d, parsed = get_dockerator()
     d.pprint()
-    print("Config files used:", parsed['used_files'])
+    print("Config files used:", parsed["used_files"])
 
 
 if __name__ == "__main__":
