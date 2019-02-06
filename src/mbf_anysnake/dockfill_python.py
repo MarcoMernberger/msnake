@@ -1,3 +1,4 @@
+# -*- coding: future_fstrings -*-
 import requests
 import tempfile
 import re
@@ -368,6 +369,7 @@ for x in [
             log_name=f"log_{self.name}_venv",
             additional_volumes=additional_volumes,
             build_cmds=f"""
+ls {self.paths['docker_storage_python']}
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
 cp /opt/sitecustomize.py {sc_file}
 echo "done"

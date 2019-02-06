@@ -1,3 +1,5 @@
+# -*- coding: future_fstrings -*-
+
 from pathlib import Path
 from docker import from_env as docker_from_env
 import time
@@ -236,7 +238,11 @@ class Dockerator:
             log_name.write(container_result)
         elif log_name:
             if append_to_log:
-                with open(self.paths[log_name], "ab") as op:
+                if not self.paths[log_name].exist():
+                    mode = 'wb'
+                else:
+                    mode = 'ab'
+                with open(self.paths[log_name], mode) as op:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)
@@ -244,7 +250,7 @@ class Dockerator:
 
     def build(
         self,
-        *,
+        # *,
         target_dir,
         target_dir_inside_docker,
         relative_check_filename,

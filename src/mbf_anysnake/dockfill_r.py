@@ -1,3 +1,5 @@
+# -*- coding: future_fstrings -*-
+
 import re
 from pathlib import Path
 import tempfile
@@ -207,7 +209,7 @@ echo "done"
             )
             now_installed = set(self.list_installed())
             still_missing = [x for x in missing if x not in now_installed]
-            if missing:
+            if still_missing:
                 raise ValueError(
                     f"Still missing: {still_missing}\nCheck {self.paths['log_r_cran']}"
                 )

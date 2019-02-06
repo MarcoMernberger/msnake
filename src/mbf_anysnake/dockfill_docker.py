@@ -1,3 +1,5 @@
+# -*- coding: future_fstrings -*-
+
 from pathlib import Path
 import subprocess
 import docker
