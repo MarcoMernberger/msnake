@@ -1,5 +1,6 @@
 # -*- coding: future_fstrings -*-
 import re
+import os
 from pathlib import Path
 from .dockerator import Dockerator
 import tomlkit
@@ -24,7 +25,10 @@ def parse_requirements(req_file):
     with open(req_file) as op:
         p = tomlkit.loads(op.read())
     if "base" in p and "global_config" in p["base"]:
-        with open(p["base"]["global_config"]) as op:
+        fn = p["base"]["global_config"]
+        for k,v in os.environ().items():
+            fn = fn.replace("${%s}" % (k, ), v)
+        with open(fn) as op:
             gconfig = tomlkit.loads(op.read())
             used_files.insert(0, p["base"]["global_config"])
             p = merge_config(gconfig, p)
