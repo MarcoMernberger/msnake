@@ -253,3 +253,9 @@ RUN apt-get install -y \
   xvfb\
   xz-utils\
   zlib1g
+
+
+RUN apt-get install -y libcgal-dev libglu1-mesa-dev libglu1-mesa-dev libsbml5-dev libfftw3-dev freeglut3-dev bwidget libmariadbclient-dev libgtkmm-2.4-dev gtk2.0 libgtk2.0-dev libhts-dev
+
+
+#MSGFplus needs a patch to work in ubuntu 18.04 with newer java version see https://github.com/thomasp85/MSGFplus/pull/13
