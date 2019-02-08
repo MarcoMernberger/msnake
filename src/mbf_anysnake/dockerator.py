@@ -44,6 +44,7 @@ class Dockerator:
         code_path,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
+        environment_variables = {}
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -100,6 +101,7 @@ class Dockerator:
 
         for k, v in self.paths.items():
             self.paths[k] = Path(v)
+        self.environment_variables = environment_variables
 
     def pprint(self):
         print("Dockerator")
@@ -149,6 +151,7 @@ class Dockerator:
         allow_writes=False,
     ):
         env = env.copy()
+        env.update(self.environment_variables)
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
@@ -181,6 +184,7 @@ class Dockerator:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:
             ro_volumes.extend([df.volumes for df in self.strategies])
+            rw_volumes.extend([df.rw_volumes for df in self.strategies if hasattr(df, 'rw_volumes')])
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
@@ -210,9 +214,20 @@ class Dockerator:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 
         cmd.extend(["-w", "/project"])
+        cmd.append('--network=host')
         cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
-        # import pprint
-        # pprint.pprint(cmd)
+        last_was_dash = True
+        for x in cmd:
+            if x.startswith('-') and not x.startswith('--'):
+                print("  " + x, end=" ")
+                last_was_dash = True
+            else:
+                if last_was_dash:
+                    print(x)
+                else:
+                    print('  ' + x)
+                last_was_dash = False
+        print('')
         p = subprocess.Popen(cmd)
         p.communicate()
 

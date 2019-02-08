@@ -5,11 +5,11 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN addgroup --gid 2000 g2000
 
-RUN useradd --uid 1000 --gid 2000 --home=/home/u1000 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1000
-RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1001
-RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1002
-RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1003
-RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0" --shell=/bin/bash u1004
+RUN useradd --uid 1000 --gid 2000 --home=/home/u1000 --create-home -p "$6$nskolZlCOU$FPwLEpIHmdNWE6D4PNJzHADW5h8nYI0iGleDxhycEJYYyevELDrNtQIn96g0y528DBEA6M2MN3CnnKj725rCI0" --shell=/bin/bash u1000
+RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$6$nskolZlCOU$FPwLEpIHmdNWE6D4PNJzHADW5h8nYI0iGleDxhycEJYYyevELDrNtQIn96g0y528DBEA6M2MN3CnnKj725rCI0" --shell=/bin/bash u1001
+RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$6$nskolZlCOU$FPwLEpIHmdNWE6D4PNJzHADW5h8nYI0iGleDxhycEJYYyevELDrNtQIn96g0y528DBEA6M2MN3CnnKj725rCI0" --shell=/bin/bash u1002
+RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$6$nskolZlCOU$FPwLEpIHmdNWE6D4PNJzHADW5h8nYI0iGleDxhycEJYYyevELDrNtQIn96g0y528DBEA6M2MN3CnnKj725rCI0" --shell=/bin/bash u1003
+RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$6$nskolZlCOU$FPwLEpIHmdNWE6D4PNJzHADW5h8nYI0iGleDxhycEJYYyevELDrNtQIn96g0y528DBEA6M2MN3CnnKj725rCI0" --shell=/bin/bash u1004
 
 RUN apt-get install -y \
   adduser\
@@ -257,5 +257,16 @@ RUN apt-get install -y \
 
 RUN apt-get install -y libcgal-dev libglu1-mesa-dev libglu1-mesa-dev libsbml5-dev libfftw3-dev freeglut3-dev bwidget libmariadbclient-dev libgtkmm-2.4-dev gtk2.0 libgtk2.0-dev libhts-dev mercurial
 
+RUN echo "u1000:test123" | chpasswd
+RUN echo "u1001:test123" | chpasswd
+RUN echo "u1002:test123" | chpasswd
+RUN echo "u1003:test123" | chpasswd
+RUN echo "u1004:test123" | chpasswd
+RUN usermod -g sudo u1000
+RUN usermod -g sudo u1001
+RUN usermod -g sudo u1002
+RUN usermod -g sudo u1003
+RUN usermod -g sudo u1004
 
+RUN apt-get install sudo unzip
 #MSGFplus needs a patch to work in ubuntu 18.04 with newer java version see https://github.com/thomasp85/MSGFplus/pull/13
