@@ -126,7 +126,7 @@ class _DockerFillVenv:
                 self.dockerator.major_python_version
             )
             for c in code_names:
-                if c not in installed_versions:
+                if self.safe_name(c) not in installed_versions:
                     had_to_clone.add(c)
             to_install = {
                 k: v
