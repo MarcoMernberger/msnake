@@ -17,8 +17,8 @@ def merge_config(d1, d2):
 
 
 def replace_env_vars(s):
-    for k,v in os.environ.items():
-        s = s.replace("${%s}" % (k, ), v)
+    for k, v in os.environ.items():
+        s = s.replace("${%s}" % (k,), v)
     return s
 
 
@@ -37,11 +37,11 @@ def parse_requirements(req_file):
             used_files.insert(0, p["base"]["global_config"])
             p = merge_config(gconfig, p)
 
-    paths = [ ('base', 'storage_path') ]
-    if 'env' in p:
-        for k in p['env']:
-            if isinstance(p['env'][k], str):
-                paths.append(('env', k))
+    paths = [("base", "storage_path")]
+    if "env" in p:
+        for k in p["env"]:
+            if isinstance(p["env"][k], str):
+                paths.append(("env", k))
     for path in paths:
         if path[0] in p:
             if path[1] in p[path[0]]:
@@ -79,13 +79,13 @@ def parsed_to_dockerator(parsed):
         storage_path = Path(base["storage_path"])
     else:
         storage_path = Path("version_store")
-    
+
     if "code_path" in base:
         code_path = Path(base["code_path"])
         del base["code_path"]
     else:
         code_path = Path("code")
-   
+
     # Todo: make configurable
     Path("logs").mkdir(parents=False, exist_ok=True)
 
@@ -98,6 +98,8 @@ def parsed_to_dockerator(parsed):
         if v and not re.match("(==)?[0-9.]+", v):
             raise ValueError(f"Invalid CRAN version specification {key}: '{v}'")
 
+    environment_variables = parsed.get("env", {})
+
     return Dockerator(
         docker_image,
         python_version,
@@ -108,6 +110,7 @@ def parsed_to_dockerator(parsed):
         cran_packages,
         storage_path,
         code_path,
+        environment_variables=environment_variables,
     )
 
 
