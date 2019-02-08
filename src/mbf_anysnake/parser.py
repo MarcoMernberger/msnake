@@ -16,6 +16,12 @@ def merge_config(d1, d2):
     return result
 
 
+def replace_env_vars(s):
+    for k,v in os.environ.items():
+        s = s.replace("${%s}" % (k, ), v)
+    return s
+
+
 def parse_requirements(req_file):
     """Parse the requirements from a anysnake.toml file
     See readme.
@@ -25,13 +31,21 @@ def parse_requirements(req_file):
     with open(req_file) as op:
         p = tomlkit.loads(op.read())
     if "base" in p and "global_config" in p["base"]:
-        fn = p["base"]["global_config"]
-        for k,v in os.environ().items():
-            fn = fn.replace("${%s}" % (k, ), v)
+        fn = replace_env_vars(p["base"]["global_config"])
         with open(fn) as op:
             gconfig = tomlkit.loads(op.read())
             used_files.insert(0, p["base"]["global_config"])
             p = merge_config(gconfig, p)
+
+    paths = [ ('base', 'storage_path') ]
+    if 'env' in p:
+        for k in p['env']:
+            if isinstance(p['env'][k], str):
+                paths.append(('env', k))
+    for path in paths:
+        if path[0] in p:
+            if path[1] in p[path[0]]:
+                p[path[0]][path[1]] = replace_env_vars(p[path[0]][path[1]])
     p["used_files"] = used_files
     return p
 
@@ -65,17 +79,13 @@ def parsed_to_dockerator(parsed):
         storage_path = Path(base["storage_path"])
     else:
         storage_path = Path("version_store")
-    if not storage_path.exists():
-        storage_path.mkdir(exist_ok=True)
-
+    
     if "code_path" in base:
         code_path = Path(base["code_path"])
         del base["code_path"]
     else:
         code_path = Path("code")
-    if not code_path.exists():
-        code_path.mkdir(exist_ok=True)
-
+   
     # Todo: make configurable
     Path("logs").mkdir(parents=False, exist_ok=True)
 

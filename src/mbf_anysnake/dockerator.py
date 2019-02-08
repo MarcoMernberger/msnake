@@ -51,11 +51,8 @@ class Dockerator:
             self.cran_mirror += "/"
 
         self.storage_path = Path(storage_path)
-        if not self.storage_path.exists():
-            raise IOError(f"{self.storage_path} did not exist")
-        storage_path = storage_path / docker_image.replace(":", "-")
-        code_path = Path(code_path)
-        code_path.mkdir(parents=False, exist_ok=True)
+        storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
+        code_path = Path(code_path).absolute()
 
         self.docker_image = docker_image
         self.python_version = python_version
@@ -70,16 +67,16 @@ class Dockerator:
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
         }
-        self.paths["storage"].mkdir(exist_ok=True)
-        self.paths["log_storage"].mkdir(parents=False, exist_ok=True)
-        self.paths["log_code"].mkdir(parents=False, exist_ok=True)
 
         dfp = DockFill_Python(self)
+        dfgv = DockFill_GlobalVenv(self, dfp)
         self.strategies = [
             DockFill_Docker(self),
             dfp,
-            DockFill_CodeVenv(self, dfp),  # since I want them earlier in the path!
-            DockFill_GlobalVenv(self, dfp),
+            DockFill_CodeVenv(
+                self, dfp, dfgv
+            ),  # since I want them earlier in the path!
+            dfgv,
         ]
         dfr = None
         if r_version:
@@ -118,11 +115,27 @@ class Dockerator:
         # todo: modularize into dockerfills
 
     def ensure(self, do_time=False):
+        self.paths["storage"].mkdir(parents=True, exist_ok=True)
+        self.paths["code"].mkdir(parents=False, exist_ok=True)
+
+        self.paths["log_storage"].mkdir(parents=False, exist_ok=True)
+        self.paths["log_code"].mkdir(parents=False, exist_ok=True)
+
         for s in self.strategies:
             start = time.time()
             s.ensure()
             if do_time:
                 print(s.__class__.__name__, time.time() - start)
+
+    def ensure_just_docker(self):
+        for s in self.strategies:
+            if isinstance(s, DockFill_Docker):
+                s.ensure()
+
+    def rebuild(self, args):
+        for s in self.strategies:
+            if hasattr(s, "rebuild"):
+                s.rebuild(args)
 
     def run(
         self,
@@ -149,6 +162,7 @@ class Dockerator:
             + ":$PATH"
         )
         tf.write(f"export PATH={path_str}\n")
+        tf.write("source /dockerator/code_venv/bin/activate\n")
         tf.write(bash_script)
         tf.flush()
 
@@ -178,9 +192,6 @@ class Dockerator:
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
-        for s in self.strategies:
-            if hasattr(s, "shell_envs"):
-                env.update(s.shell_envs)
         for key, value in env.items():
             cmd.append("-e")
             cmd.append("%s=%s" % (key, value))
@@ -200,6 +211,7 @@ class Dockerator:
 
         cmd.extend(["-w", "/project"])
         cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
+        # import pprint
         # pprint.pprint(cmd)
         p = subprocess.Popen(cmd)
         p.communicate()
