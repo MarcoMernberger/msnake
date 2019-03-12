@@ -5,6 +5,7 @@ import re
 import os
 import subprocess
 import packaging.version
+import pkg_resources
 from pathlib import Path
 from .util import combine_volumes
 
@@ -20,7 +21,7 @@ class DockFill_Python:
                     self.paths["storage"] / "python" / self.python_version
                 ),
                 "docker_storage_python": "/dockerator/python",
-                "docker_code": "/dockerator/code",
+                "docker_code": "/project/code",
                 "log_python": self.paths["log_storage"]
                 / f"dockerator.python.{self.python_version}.log",
             }
@@ -108,7 +109,7 @@ class _DockerFillVenv:
         self.create_venv()
         self.fill_venv()
 
-    def fill_venv(self):
+    def fill_venv(self, rebuild=False):
         code_packages = {
             k: v
             for (k, v) in self.packages.items()
@@ -118,41 +119,46 @@ class _DockerFillVenv:
             and re.match(re_github, v[1:])  # github
         }
         code_names = set(code_packages.keys())
-        pip_packages = [
-            (k, v) for (k, v) in self.packages.items() if k not in code_names
-        ]
+        had_to_clone = self.clone_code_packages(code_packages)
+        if rebuild:
+            to_install = self.packages
+            had_to_clone = code_names
+        else:
+            installed_versions = self.find_installed_package_versions(
+                self.dockerator.major_python_version
+            )
+            for c in code_names:
+                if self.safe_name(c) not in installed_versions:
+                    had_to_clone.add(c)
+            to_install = {
+                k: v
+                for (k, v) in self.packages.items()
+                if (
+                    k not in code_names
+                    and not version_is_compatible(
+                        v, installed_versions.get(self.safe_name(k), "")
+                    )
+                )
+                or (k in code_names and k in had_to_clone)
+            }
+        if to_install:
+            self.install_pip_packages(to_install, had_to_clone)
 
-        installed_versions = self.find_installed_package_versions(
-            self.dockerator.major_python_version
-        )
-        installed = set(installed_versions.keys())
-        missing_pip = {
-            k: v
-            for (k, v) in pip_packages
-            if k.lower() not in installed
-            or not version_is_compatible(v, installed_versions[k.lower()])
-        }
-        if missing_pip:
-            print("\tpip install", list(missing_pip.keys()))
-            self.install_pip_packages(missing_pip, self.dockfill_python)
+    def safe_name(self, name):
+        return pkg_resources.safe_name(name)
 
-        missing_code = set([k for k in code_packages.keys() if not k in installed])
-        self.install_code_packages(code_packages, missing_code)
-
-    def install_code_packages(self, code_packages, missing_code):
+    def clone_code_packages(self, code_packages):
+        result = set()
         for name, url_spec in code_packages.items():
             log_key = f"log_{self.name}_venv_{name}"
-            self.paths[log_key + "_pip"] = self.log_path / (
-                f"dockerator.{self.name}_venv_{name}.pip.log"
-            )
             self.paths[log_key + "_clone"] = self.log_path / (
                 f"dockerator.{self.name}_venv_{name}.pip.log"
             )
-            target_path = self.paths["code"] / name
+            target_path = self.clone_path / name
             with open(self.paths[log_key + "_clone"], "wb") as log_file:
                 if not target_path.exists():
-                    missing_code.add(name)
                     print("\tcloning", name)
+                    result.append(target_path)
                     url = url_spec
                     if url.startswith("@"):
                         url = url[1:]
@@ -181,34 +187,7 @@ class _DockerFillVenv:
                             stdout=log_file,
                             stderr=log_file,
                         )
-        for name in missing_code:
-            print("\tpip install -e", "/opt/code/" + name)
-            log_key = f"log_{self.name}_venv_{name}"
-            self.dockerator._run_docker(
-                f"""
-    echo {self.paths['docker_code_venv']}/bin/pip install -U -e {self.paths['docker_code']}/{name}
-    {self.paths['docker_code_venv']}/bin/pip install -U -e {self.paths['docker_code']}/{name}
-    echo "done"
-    """,
-                {
-                    "volumes": combine_volumes(
-                        ro=self.dockfill_python.volumes,
-                        rw=[
-                            {self.paths["code"]: self.paths["docker_code"]},
-                            self.volumes,
-                        ],
-                    )
-                },
-                log_key + "_pip",
-            )
-        installed_now = self.find_installed_packages(
-            self.dockerator.major_python_version
-        )
-        still_missing = set([x.lower() for x in missing_code]).difference(installed_now)
-        if still_missing:
-            raise ValueError(
-                "Not all code packages installed. Missing were: %s" % (still_missing)
-            )
+        return result
 
     def find_installed_packages(self, major_python_version):
         return list(self.find_installed_package_versions(major_python_version).keys())
@@ -225,17 +204,23 @@ class _DockerFillVenv:
             if p.name.endswith(".dist-info"):
                 name = p.name[: p.name.rfind("-", 0, -5)]
                 version = p.name[p.name.rfind("-", 0, -5) + 1 : -1 * len(".dist-info")]
-                result[name.lower()] = version
+                result[self.safe_name(name)] = version
             elif p.name.endswith(".egg-link"):
                 name = p.name[: -1 * len(".egg-link")]
                 version = "unknown"
-                result[name.lower()] = version
+                result[self.safe_name(name)] = version
         return result
 
-    def install_pip_packages(self, packages, dockfill_python):
+    def install_pip_packages(self, packages, code_packages):
         """packages are parse_requirements results with method == 'pip'"""
-        pkg_string = " ".join(["'%s%s'" % (k, v) for (k, v) in packages.items()])
-
+        pkg_string = []
+        for k, v in packages.items():
+            if k in code_packages:
+                pkg_string.append(f"-e /project/code/{k}")
+            else:
+                pkg_string.append("%s%s" % (k, v))
+        pkg_string = " ".join(pkg_string)
+        print(f"\tpip install {pkg_string}")
         self.dockerator._run_docker(
             f"""
     {self.target_path_inside_docker}/bin/pip install {pkg_string}
@@ -243,8 +228,13 @@ class _DockerFillVenv:
     """,
             {
                 "volumes": combine_volumes(
-                    ro=[dockfill_python.volumes],
-                    rw=[{self.target_path: self.target_path_inside_docker}],
+                    ro=[self.dockfill_python.volumes],
+                    rw=[
+                        {
+                            self.target_path: self.target_path_inside_docker,
+                            self.clone_path: self.clone_path_inside_docker,
+                        }
+                    ],
                 )
             },
             f"log_{self.name}_venv_pip",
@@ -252,7 +242,9 @@ class _DockerFillVenv:
         installed_now = self.find_installed_packages(
             self.dockerator.major_python_version
         )
-        still_missing = set(packages.keys()).difference(installed_now)
+        still_missing = set([self.safe_name(k) for k in packages.keys()]).difference(
+            installed_now
+        )
         if still_missing:
             raise ValueError(
                 f"Installation of packages failed: {still_missing}\n"
@@ -271,15 +263,20 @@ class DockFill_GlobalVenv(_DockerFillVenv):
             {
                 "storage_venv": (self.paths["storage"] / "venv" / self.python_version),
                 "docker_storage_venv": "/dockerator/storage_venv",
+                "storage_clones": self.paths["storage"] / "code",
+                "docker_storage_clones": "/dockerator/storage_clones",
             }
         )
         self.target_path = self.paths["storage_venv"]
         self.target_path_inside_docker = self.paths["docker_storage_venv"]
+        self.clone_path = self.paths["storage_clones"]
+        self.clone_path_inside_docker = self.paths["docker_storage_clones"]
         self.log_path = self.paths["log_storage"]
 
         self.dockfill_python = dockfill_python
         self.volumes = {
-            self.paths["storage_venv"]: dockerator.paths[f"docker_storage_venv"]
+            self.paths["storage_venv"]: dockerator.paths["docker_storage_venv"],
+            self.paths["storage_clones"]: dockerator.paths["docker_storage_clones"],
         }
         self.packages = self.dockerator.global_python_packages
         self.shell_path = str(Path(self.paths["docker_storage_venv"]) / "bin")
@@ -305,8 +302,9 @@ echo "done"
 
 
 class DockFill_CodeVenv(_DockerFillVenv):
-    def __init__(self, dockerator, dockfill_python):
+    def __init__(self, dockerator, dockfill_python, dockfill_global_venv):
         self.dockerator = dockerator
+        self.dockfill_global_venv = dockfill_global_venv
         self.paths = self.dockerator.paths
         self.name = "code"
         self.log_path = self.paths["log_code"]
@@ -315,18 +313,65 @@ class DockFill_CodeVenv(_DockerFillVenv):
             {
                 "code_venv": self.paths["code"] / "venv" / self.python_version,
                 "docker_code_venv": "/dockerator/code_venv",
+                "code_clones": self.paths["code"],
+                "docker_code_clones": "/project/code",
             }
         )
         self.target_path = self.paths["code_venv"]
         self.target_path_inside_docker = self.paths["docker_code_venv"]
+        self.clone_path = self.paths["code_clones"]
+        self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
         self.volumes = {
             self.paths["code"]: dockerator.paths[f"docker_code"],
             self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
-        }
+                        
+                        }
         self.packages = self.dockerator.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()
+
+    def ensure(self):
+        super().ensure()
+        self.copy_bins_from_global()
+
+    def copy_bins_from_global(self):
+        source_dir = self.paths["storage_venv"] / "bin"
+        target_dir = self.paths["code_venv"] / "bin"
+        for input_fn in source_dir.glob("*"):
+            output_fn = target_dir / input_fn.name
+            if not output_fn.exists():
+                input = input_fn.read_text()
+                if input.startswith("#"):
+                    n_pos = input.find("\n")
+                    first_line = input[:n_pos]
+                    if (
+                        first_line
+                        == f"#!{self.paths['docker_storage_venv']}/bin/python"
+                    ):
+                        output = (
+                            f"#!{self.paths['docker_code_venv']}/bin/python"
+                            + input[n_pos:]
+                        )
+                        output_fn.write_text(output)
+            output_fn.chmod(input_fn.stat().st_mode)
+        pth_path = (
+            self.paths["code_venv"]
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+            / "site-packages"
+            / "anysnake.pth"
+        )
+        if not pth_path.exists():
+            pth_path.write_text(
+                str(
+                    self.paths["docker_storage_venv"]
+                    / "lib"
+                    / ("python" + self.dockerator.major_python_version)
+                    / "site-packages"
+                )
+                + "\n"
+            )
 
     def pprint(self):
         print("  Local python packages")
@@ -378,8 +423,13 @@ echo "done"
 """,
         )
 
+    def rebuild(self, packages):
+        self.fill_venv(rebuild=True)
+
 
 def version_is_compatible(dep_def, version):
+    if version == "": # not previously installed, I guess
+        return False
     if dep_def == "":
         return True
     operators = ["<=", "<", "!=", "==", ">=", ">", "~=", "==="]

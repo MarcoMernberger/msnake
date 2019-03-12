@@ -44,6 +44,7 @@ class Dockerator:
         code_path,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
+        environment_variables = {}
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -51,11 +52,8 @@ class Dockerator:
             self.cran_mirror += "/"
 
         self.storage_path = Path(storage_path)
-        if not self.storage_path.exists():
-            raise IOError(f"{self.storage_path} did not exist")
-        storage_path = storage_path / docker_image.replace(":", "-")
-        code_path = Path(code_path)
-        code_path.mkdir(parents=False, exist_ok=True)
+        storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
+        code_path = Path(code_path).absolute()
 
         self.docker_image = str(docker_image)
         self.python_version = python_version
@@ -70,16 +68,16 @@ class Dockerator:
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
         }
-        self.paths["storage"].mkdir(exist_ok=True)
-        self.paths["log_storage"].mkdir(parents=False, exist_ok=True)
-        self.paths["log_code"].mkdir(parents=False, exist_ok=True)
 
         dfp = DockFill_Python(self)
+        dfgv = DockFill_GlobalVenv(self, dfp)
         self.strategies = [
             DockFill_Docker(self),
             dfp,
-            DockFill_CodeVenv(self, dfp),  # since I want them earlier in the path!
-            DockFill_GlobalVenv(self, dfp),
+            DockFill_CodeVenv(
+                self, dfp, dfgv
+            ),  # since I want them earlier in the path!
+            dfgv,
         ]
         dfr = None
         if r_version:
@@ -102,6 +100,7 @@ class Dockerator:
 
         for k, v in self.paths.items():
             self.paths[k] = Path(v)
+        self.environment_variables = environment_variables
 
     def pprint(self):
         print("Dockerator")
@@ -117,11 +116,27 @@ class Dockerator:
         # todo: modularize into dockerfills
 
     def ensure(self, do_time=False):
+        self.paths["storage"].mkdir(parents=True, exist_ok=True)
+        self.paths["code"].mkdir(parents=False, exist_ok=True)
+
+        self.paths["log_storage"].mkdir(parents=False, exist_ok=True)
+        self.paths["log_code"].mkdir(parents=False, exist_ok=True)
+
         for s in self.strategies:
             start = time.time()
             s.ensure()
             if do_time:
                 print(s.__class__.__name__, time.time() - start)
+
+    def ensure_just_docker(self):
+        for s in self.strategies:
+            if isinstance(s, DockFill_Docker):
+                s.ensure()
+
+    def rebuild(self, args):
+        for s in self.strategies:
+            if hasattr(s, "rebuild"):
+                s.rebuild(args)
 
     def run(
         self,
@@ -135,6 +150,7 @@ class Dockerator:
         allow_writes=False,
     ):
         env = env.copy()
+        env.update(self.environment_variables)
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
@@ -148,6 +164,7 @@ class Dockerator:
             + ":$PATH"
         )
         tf.write(f"export PATH={path_str}\n")
+        tf.write("source /dockerator/code_venv/bin/activate\n")
         tf.write(bash_script)
         tf.flush()
 
@@ -166,6 +183,7 @@ class Dockerator:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:
             ro_volumes.extend([df.volumes for df in self.strategies])
+            rw_volumes.extend([df.rw_volumes for df in self.strategies if hasattr(df, 'rw_volumes')])
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
@@ -177,9 +195,6 @@ class Dockerator:
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
-        for s in self.strategies:
-            if hasattr(s, "shell_envs"):
-                env.update(s.shell_envs)
         for key, value in env.items():
             cmd.append("-e")
             cmd.append("%s=%s" % (key, value))
@@ -198,8 +213,20 @@ class Dockerator:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 
         cmd.extend(["-w", "/project"])
+        cmd.append('--network=host')
         cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
-        # pprint.pprint(cmd)
+        last_was_dash = True
+        for x in cmd:
+            if x.startswith('-') and not x.startswith('--'):
+                print("  " + x, end=" ")
+                last_was_dash = True
+            else:
+                if last_was_dash:
+                    print(x)
+                else:
+                    print('  ' + x)
+                last_was_dash = False
+        print('')
         p = subprocess.Popen(cmd)
         p.communicate()
 

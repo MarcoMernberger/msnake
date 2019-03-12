@@ -16,55 +16,6 @@ def get_dockerator():
     parsed = parse_requirements(config_file)
     return parsed_to_dockerator(parsed), parsed
 
-
-@main.command()
-@click.option("--do-time", default=False, is_flag=True)
-def build(do_time=False):
-    """Build everything if necessary - from docker to local venv from project.setup"""
-    d, _ = get_dockerator()
-    d.ensure(do_time)
-    return d
-
-
-@main.command()
-def rebuild():
-    """for each locally cloned package in code,
-    call python setup.py install
-    """
-    raise ValueError("todo")
-
-
-@main.command()
-def rebuild_global_venv():
-    raise ValueError("todo")
-
-
-def get_volumes_config(config, key1, key2):
-    result = {}
-    if key1 in config and key2 in config[key1]:
-        for (f, t) in config[key1][key2]:
-            result[Path(f).absolute()] = t
-    return result
-
-
-@main.command()
-@click.option("--no-build/--build", default=False)
-@click.option("--allow-writes/--no-allow-writes", default=False)
-def shell(no_build=False, allow_writes=False):
-    """Run a shell with everything mapped (build if necessary)"""
-    d, config = get_dockerator()
-    if not no_build:
-        d.ensure()
-
-    d.run(
-        "/usr/bin/fish",
-        allow_writes=allow_writes,
-        home_files=home_files,
-        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
-    )
-
-
 def get_next_free_port(start_at):
     import socket
 
@@ -84,7 +35,77 @@ def get_next_free_port(start_at):
     return port
 
 
-main.command()
+def get_volumes_config(config, key1, key2):
+    """Extract a volumes config from the config if present""" 
+    result = {}
+    if key1 in config and key2 in config[key1]:
+        for (f, t) in config[key1][key2]:
+            result[Path(f).absolute()] = t
+    return result
+
+
+
+@main.command()
+@click.option("--do-time", default=False, is_flag=True)
+def build(do_time=False):
+    """Build everything if necessary - from docker to local venv from project.setup"""
+    d, _ = get_dockerator()
+    d.ensure(do_time)
+    return d
+
+
+@main.command()
+@click.argument('modules', nargs=-1)
+def rebuild(modules=[]):
+    """for each locally cloned package in code,
+    call python setup.py install
+    """
+    d, config = get_dockerator()
+    d.rebuild(modules)
+
+
+@main.command()
+def rebuild_global_venv():
+    raise ValueError("todo")
+    
+
+@main.command()
+@click.option("--no-build/--build", default=False)
+@click.option("--allow-writes/--no-allow-writes", default=False)
+def shell(no_build=False, allow_writes=False):
+    """Run a shell with everything mapped (build if necessary)"""
+    d, config = get_dockerator()
+    if not no_build:
+        d.ensure()
+    else:
+        d.ensure_just_docker()
+    d.run(
+        "/usr/bin/fish",
+        allow_writes=allow_writes,
+        home_files=home_files,
+        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
+    )
+
+@main.command()
+@click.option("--no-build/--build", default=False)
+@click.argument('cmd', nargs=-1)
+def run(cmd, no_build=False):
+    """Run a command"""
+    d, config = get_dockerator()
+    if not no_build:
+        d.ensure()
+    else:
+        d.ensure_just_docker()
+
+    d.run(
+        " ".join(cmd),
+        allow_writes=False,
+        home_files=home_files,
+        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
+    )
+
 
 
 @main.command()
@@ -95,6 +116,8 @@ def jupyter(no_build=False):
     d, config = get_dockerator()
     if not no_build:
         d.ensure()
+    else:
+        d.ensure_just_docker()
     host_port = get_next_free_port(8888)
     print("Starting notebookt at %i" % host_port)
 
