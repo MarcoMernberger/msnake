@@ -36,6 +36,9 @@ blacklist = {
     "gpuR",  # unknown opencl error - possibly fixable
     "cudaBayesreg",  # won't compile, removed from cran on mantainer's request
     'permGPU', # insists on not respecting CUDA_HOME enviroment variable.
+    'BiocSklearn', # won't use the right python? possible fixable
+    'rPython', # can't find python so - fixable? 
+    'SnakeCharmR', # can't find python so - fixable? 
     # windows only packages are automatically detected
 }
 packages_needing_X = {
@@ -166,7 +169,6 @@ def install_bioconductor():
 def unprune(job, seen):
     if not job.job_id in seen:
         seen.add(job.job_id)
-        print("unpruning", job.job_id)
         job._pruned = False
         for p in job.prerequisites:
             unprune(p, seen)
@@ -189,7 +191,7 @@ def load_packages(name, url):
 
 
 def write_done_sentinel():
-    Path("/dockerator/bioconductor/done.sentinel").write("done")
+    Path("/dockerator/bioconductor/done.sentinel").write_text("done")
 
 
 def get_preqs(info):

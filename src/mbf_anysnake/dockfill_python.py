@@ -145,7 +145,7 @@ class _DockerFillVenv:
             self.install_pip_packages(to_install, had_to_clone)
 
     def safe_name(self, name):
-        return pkg_resources.safe_name(name)
+        return pkg_resources.safe_name(name).lower()
 
     def clone_code_packages(self, code_packages):
         result = set()
@@ -223,7 +223,8 @@ class _DockerFillVenv:
         print(f"\tpip install {pkg_string}")
         self.dockerator._run_docker(
             f"""
-    {self.target_path_inside_docker}/bin/pip install {pkg_string}
+#!/bin/bash
+    {self.target_path_inside_docker}/bin/pip install "{pkg_string}"
     echo "done"
     """,
             {
@@ -243,7 +244,7 @@ class _DockerFillVenv:
             self.dockerator.major_python_version
         )
         still_missing = set([self.safe_name(k) for k in packages.keys()]).difference(
-            installed_now
+            [self.safe_name(k) for k in installed_now]
         )
         if still_missing:
             raise ValueError(
