@@ -49,7 +49,7 @@ def get_volumes_config(config, key1, key2):
 
 @main.command()
 @click.option("--no-build/--build", default=False)
-@click.option("--allow_writes/--no-allow_writes", default=False)
+@click.option("--allow-writes/--no-allow-writes", default=False)
 def shell(no_build=False, allow_writes=False):
     """Run a shell with everything mapped (build if necessary)"""
     d, config = get_dockerator()

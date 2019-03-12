@@ -5,11 +5,12 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN addgroup --gid 2000 g2000
 
-RUN useradd --uid 1000 --gid 2000 --home=/home/u1000 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1000
-RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1001
-RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1002
-RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0"--shell=/bin/bash u1003
-RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$/wnlZvR6$/5QtKalJDVsM4lVvsmgMy0" --shell=/bin/bash u1004
+RUN useradd --uid 1000 --gid 2000 --home=/home/u1000 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1000
+RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1001
+RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1002
+RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1003
+RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1" --shell=/bin/bash u1004
+RUN echo "root:test123" | chpasswd
 
 RUN apt-get install -y \
   adduser\
@@ -23,11 +24,14 @@ RUN apt-get install -y \
   bsdmainutils\
   bsdutils\
   build-essential\
-  build-essential\
+  bwidget \
   bzip2\
   ca-certificates\
+  cargo\
+  cmake\
+  coinor-libclp-dev\
+  coinor-libsymphony-dev\
   coreutils\
-  cpp-8\
   curl\
   dash\
   debconf\
@@ -37,6 +41,7 @@ RUN apt-get install -y \
   default-jdk-headless\
   default-jre\
   default-jre-headless\
+  default-libmysqlclient-dev\
   dh-autoreconf\
   dh-strip-nondeterminism\
   diffutils\
@@ -47,31 +52,35 @@ RUN apt-get install -y \
   findutils\
   fish \
   fonts-lmodern\
-  g++-8\
-  gcc-8\
-  gcc-8-base\
+  freeglut3-dev \
   gettext\
   gettext-base\
   gfortran\
+  ggobi\
   gir1.2-freedesktop\
   gir1.2-pango-1.0\
   git\
+  gnuplot\
   gpgv\
   grep\
   groff-base\
   gsl-bin \
+  gtk2.0 \
   gzip\
   hostname\
   init-system-helpers\
   intltool-debian\
   jags \
+  jags\
   libacl1\
+  libapparmor-dev\
   libapt-pkg5.0\
   libarchive-zip-perl\
   libasan5\
   libattr1\
   libaudit1\
   libaudit-common\
+  libavfilter-dev\
   libbison-dev\
   libblas3\
   libblas-dev\
@@ -83,30 +92,40 @@ RUN apt-get install -y \
   libcairo-script-interpreter2\
   libcap-ng0\
   libc-bin\
+  libcgal-dev \
   libcom-err2\
   libcupsimage2\
-  libcurl4-openssl-dev\
   libdb5.3\
   libdb5.3-dev\
   libdb-dev\
   libdebconfclient0\
+  libdieharder-dev\
   libext2fs2\
   libfdisk1\
   libffi6\
+  libfftw3-dev \
   libfile-stripnondeterminism-perl\
-  libgcc1\
-  libgcc-8-dev\
   libgcrypt20\
+  libgdal-dev\
   libgdbm-dev\
+  libgeos-dev\
+  libglpk-dev\
+  libglu1-mesa-dev \
+  libgmp10\
   libgmp10\
   libgnutls30\
   libgpg-error0\
+  libgpgme11-dev\
   libgraphicsmagick1-dev \
   libgs9\
   libgs9-common\
   libgsl0-dev \
   libgsl23 \
+  libgtk2.0-dev \
+  libgtkmm-2.4-dev \
+  libhiredis-dev\
   libhogweed4\
+  libhts-dev \
   libidn11\
   libidn2-0\
   libijs-0.35\
@@ -115,18 +134,24 @@ RUN apt-get install -y \
   libjpeg8-dev\
   libjpeg-dev\
   libjpeg-turbo8-dev\
+  libjq-dev\
   libkpathsea6\
   liblapack3\
   liblapack-dev\
+  libleptonica-dev\
   liblz4-1\
   liblzma5\
   liblzma-dev \
   liblzo2-2\
+  libmagic-dev\
   libmagick++-dev \
+  libmecab-dev\
+  libmecab-dev\
   libmime-charset-perl\
   libmount1\
   libmpdec-dev\
   libmpfr-dev \
+  libmysqlclient-dev\
   libncurses5\
   libncurses5-dev \
   libncursesw5\
@@ -134,7 +159,6 @@ RUN apt-get install -y \
   libnetcdf-dev \
   libnettle6\
   libopenbabel-dev \
-  libopenblas-base \
   libopenblas-base \
   libopenblas-dev \
   libopenmpi-dev \
@@ -152,13 +176,28 @@ RUN apt-get install -y \
   libpcre3\
   libpixman-1-dev\
   libpoppler73\
+  libpoppler-cpp-dev\
+  libpoppler-dev\
+  libpoppler-glib-dev\
   libpotrace0\
+  libpq-dev\
   libprocps6\
+  libproj-dev\
+  libprotobuf-dev\
+  libprotoc-dev\
   libpython2.7-minimal\
   libpython2.7-stdlib\
   libpython-stdlib\
+  libquantlib0-dev\
+  librdf0-dev\
+  libraptor2-dev \
+  libcurl4-gnutls-dev \
+  librasqal3-dev \
   libreadline-dev \
+  librrd-dev\
   libsasl2-dev \
+  libsbml5-dev \
+  libsbml5-dev\
   libseccomp2\
   libselinux1\
   libsemanage1\
@@ -166,18 +205,25 @@ RUN apt-get install -y \
   libsepol1\
   libsigsegv2\
   libsmartcols1\
+  libsndfile1\
+  libsndfile1-dev\
+  libsodium23 \
+  libsodium-dev\
   libsombok3\
-  libsqlite3-dev\
   libsqlite3-dev \
+  libsqlite3-dev\
   libss2\
+  libssh-dev\
   libssl1.0.0\
   libssl1.1\
-  libssl-dev\
   libssl-dev \
+  libssl-dev\
   libstdc++6\
-  libstdc++-8-dev\
   libsystemd0\
   libtasn1-6\
+  libtbb2\
+  libtbb-dev\
+  libtesseract-dev\
   libtext-unidecode-perl\
   libtiff5-dev\
   libtiffxx5\
@@ -190,6 +236,7 @@ RUN apt-get install -y \
   libunicode-linebreak-perl\
   libunistring2\
   libuuid1\
+  libv8-3.14-dev\
   libxcb-render0-dev\
   libxcb-shm0-dev\
   libxfont2\
@@ -201,6 +248,7 @@ RUN apt-get install -y \
   libxml-sax-perl\
   libxmlsec1-dev \
   libz-dev\
+  libzmq3-dev\
   libzstd1\
   libzzip-0-13\
   llvm\
@@ -215,6 +263,10 @@ RUN apt-get install -y \
   mpack\
   ncurses-base\
   ncurses-bin\
+  nvidia-cuda-dev\
+  nvidia-cuda-toolkit\
+  nvidia-opencl-dev\
+  opencl-headers\
   openjdk-11-jdk\
   openjdk-11-jdk-headless\
   openjdk-11-jre\
@@ -226,9 +278,12 @@ RUN apt-get install -y \
   po-debconf\
   poppler-data\
   procps\
+  protobuf-compiler\
   python\
   python2.7\
   python2.7-minimal\
+  python3-dev \
+  python-dev\
   python-minimal\
   quilt\
   sed\
@@ -237,9 +292,11 @@ RUN apt-get install -y \
   t1utils\
   tar\
   tcl8.6-dev \
+  tesseract-ocr-eng\
   tk-dev \
   tzdata\
   ubuntu-keyring\
+  unixodbc-dev\
   util-linux\
   vim\
   wget\
@@ -250,12 +307,9 @@ RUN apt-get install -y \
   xfonts-utils\
   xserver-common\
   xvfb\
-  xvfb\
   xz-utils\
   zlib1g
 
-
-RUN apt-get install -y libcgal-dev libglu1-mesa-dev libglu1-mesa-dev libsbml5-dev libfftw3-dev freeglut3-dev bwidget libmariadbclient-dev libgtkmm-2.4-dev gtk2.0 libgtk2.0-dev libhts-dev
-
-
-#MSGFplus needs a patch to work in ubuntu 18.04 with newer java version see https://github.com/thomasp85/MSGFplus/pull/13
+RUN ln -s  /usr/bin/nvcc /bin/nvcc
+RUN mkdir -p /usr/local/cuda/bin
+RUN ln -s  /usr/bin/nvcc  /usr/local/cuda/bin/nvcc

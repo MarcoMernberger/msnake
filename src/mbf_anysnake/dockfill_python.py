@@ -68,6 +68,8 @@ cd pyenv/plugins/python-build
 ./install.sh
 
 export MAKE_OPTS=-j{self.dockerator.cores}
+export CONFIGURE_OPTS=--enable-shared
+export PYTHON_CONFIGURE_OPTS=--enable-shared
 python-build {python_version} {self.paths['docker_storage_python']}
 {self.paths['docker_storage_python']}/bin/pip install -U pip virtualenv
 chown {os.getuid()}:{os.getgid()} {self.paths['docker_storage_python']} -R
