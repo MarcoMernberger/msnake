@@ -12,7 +12,7 @@ import multiprocessing
 
 from .dockfill_docker import DockFill_Docker
 from .dockfill_python import DockFill_Python, DockFill_GlobalVenv, DockFill_CodeVenv
-from .dockfill_r import DockFill_R, DockFill_CRAN, DockFill_Rpy2
+from .dockfill_r import DockFill_R, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
 from .util import combine_volumes
 
@@ -39,7 +39,7 @@ class Dockerator:
         r_version,
         global_python_packages,
         local_python_packages,
-        cran_packages,
+        bioconductor_whitelist,
         storage_path,
         code_path,
         cores=None,
@@ -55,12 +55,12 @@ class Dockerator:
         storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
         code_path = Path(code_path).absolute()
 
-        self.docker_image = docker_image
+        self.docker_image = str(docker_image)
         self.python_version = python_version
         self.bioconductor_version = bioconductor_version
         self.global_python_packages = global_python_packages
         self.local_python_packages = local_python_packages
-        self.cran_packages = cran_packages
+        self.bioconductor_whitelist = bioconductor_whitelist
 
         self.paths = {
             "storage": storage_path,
@@ -95,7 +95,6 @@ class Dockerator:
         if dfr:
             self.strategies.append(dfr)
             self.strategies.append(DockFill_Rpy2(self, dfp, dfr))
-            self.strategies.append(DockFill_CRAN(self, dfr))
             if self.bioconductor_version:
                 self.strategies.append(DockFill_Bioconductor(self, dfr))
 
@@ -189,7 +188,7 @@ class Dockerator:
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
 
-        cmd = ["docker", "run", "-it"]
+        cmd = ["docker", "run", "-it", '--rm']
         for outside_path, v in volumes.items():
             inside_path, mode = v
             cmd.append("-v")
@@ -270,6 +269,7 @@ class Dockerator:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)
+        container.remove()
         return container_result
 
     def build(
@@ -299,7 +299,8 @@ class Dockerator:
                 volumes.update(additional_volumes)
             container_result = self._run_docker(
                 build_cmds,
-                {"volumes": volumes, "environment": environment},
+                {"volumes": volumes, "environment": environment,
+                 },
                 log_name,
                 root=root,
             )

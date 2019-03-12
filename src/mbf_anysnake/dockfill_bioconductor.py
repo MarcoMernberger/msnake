@@ -6,46 +6,8 @@ import shutil
 from pathlib import Path
 import tempfile
 import re
-import packaging.version
 
 from .util import combine_volumes
-
-global_blacklist = {
-    "tcltk2"  # this causes endless loops while installing, possibly to a tcl version mismatch
-}
-# indexed by bioconductor version!
-blacklist_per_repo_and_version = {
-    "software": {
-        "3.8": set()
-        # "BiocSklearn"
-        # needs python 2.7 / numpy pandas and does not do it dynamically / with our venv
-    }
-}
-
-# some packages are *duplicated* in the package index.
-# the default is, if the version is identical, to take the one with a md5sum.
-# otherwise the valid options are first, last, larger (=version) and smaller
-# (=version)
-duplicate_handling = {
-    "cran": {
-        'survival': 'larger',
-        'sivipm': 'smaller', # 1.1-3 and 1.1-4, but 1.1-4 has no tar.gz!
-        # "boot": "last",
-    }
-}
-
-
-def chunks(iter, n):
-    # For item i in a range that is a length of l,
-    col = []
-    for i in iter:
-        col.append(i)
-        if len(col) == n:
-            yield col
-            col = []
-    if col:
-        yield col
-
 
 class DockFill_Bioconductor:
     def __init__(self, dockerator, dockfill_r):
@@ -53,6 +15,7 @@ class DockFill_Bioconductor:
         self.dockfill_r = dockfill_r
         self.paths = self.dockerator.paths
         self.bioconductor_version = dockerator.bioconductor_version
+        self.bioconductor_whitelist = dockerator.bioconductor_whitelist
         self.paths.update(
             {
                 "storage_bioconductor": (
@@ -65,10 +28,7 @@ class DockFill_Bioconductor:
                     / self.bioconductor_version
                 ),
                 "docker_storage_bioconductor_download": (
-                    str(
-                        Path("/dockerator/bioconductor_download")
-                        / self.bioconductor_version
-                    )
+                    str(Path("/dockerator/bioconductor_download"))
                 ),
                 "log_bioconductor": (
                     self.paths["log_storage"]
@@ -83,7 +43,10 @@ class DockFill_Bioconductor:
         self.volumes = {
             self.paths["storage_bioconductor"]: self.paths[
                 "docker_storage_bioconductor"
-            ]
+            ],
+            self.paths["storage_bioconductor_download"]: self.paths[
+                "docker_storage_bioconductor_download"
+            ],
         }
 
     def pprint(self):
@@ -227,349 +190,48 @@ class DockFill_Bioconductor:
                 "experiment": f"https://bioconductor.org/packages/{self.bioconductor_version}/data/experiment/",
                 "cran": mran_url,
             }
-            for k in urls:
-                (self.paths["storage_bioconductor_download"] / k).mkdir(exist_ok=True)
-            pkg_info_by_repo = {
-                k: RPackageInfo(urls[k], k, self.paths["storage_bioconductor"]).get()
-                for k in urls
-            }
-            pkg_infos = {}
-            for k in urls:
-                pkg_infos.update(pkg_info_by_repo[k])
-            dep_fields = ["depends", "imports", "linkingto"]
-
-            packages_to_fetch = set()
-            for s in "software", "cran":
-                p = pkg_info_by_repo[s].keys()
-                if s in blacklist_per_repo_and_version:
-                    if self.bioconductor_version in blacklist_per_repo_and_version[s]:
-                        p -= blacklist_per_repo_and_version[s][
-                            self.bioconductor_version
-                        ]
-                packages_to_fetch.update(p)
-            packages_to_fetch -= global_blacklist
-
-            all_packages = set(pkg_infos.keys())
-            all_deps = self.get_dependencies(all_packages, pkg_infos, dep_fields)
-            packages_to_fetch = self.expand_dependencies(packages_to_fetch, all_deps)
-            # packages_to_fetch now dict of name -> dependencies
-            data_packages = set(
-                pkg_info_by_repo["annotation"].keys()
-                | pkg_info_by_repo["experiment"].keys()
-            )
-            packages_needing_pruning = {
-                pkg: deps.intersection(data_packages)
-                for (pkg, deps) in packages_to_fetch.items()
-                if deps.intersection(data_packages)
-            }
-            print("no. Packages that might need pruning", len(packages_needing_pruning))
-
-            installed = self.list_installed()
-            # packages to fetch now set again
-
-            fetch_order = self.apply_topological_order(packages_to_fetch, all_deps)
-            fetch_order = [x for x in fetch_order if x not in installed][::-1]
-
-            order_plus_info = [(pkg, pkg_infos[pkg]) for pkg in fetch_order]
-            (self.paths["storage_bioconductor"] / "order").write_text(
-                "\n".join([x[0] for x in order_plus_info])
-            )
-            self.download_packages(order_plus_info)
-            self.install_packages(order_plus_info)
-
-    def get_dependencies(self, packages, pkg_info, dep_fields):
-        result = {}
-        for p in packages:
-            result[p] = set()
-            for f in dep_fields:
-                result[p].update(pkg_info[p][f])
-        return result
-
-    def expand_dependencies(self, packages, all_dependencies):
-        deps = {}
-        stack = list(packages)
-        while stack:
-            pkg = stack.pop()
-            pkg_deps = all_dependencies[pkg]
-            deps[pkg] = pkg_deps
-            for d in pkg_deps:
-                if not d in deps:
-                    stack.append(d)
-        return deps
-
-    def apply_topological_order(self, packages, all_dependencies):
-        class Node:
-            def __init__(self, name):
-                self.name = name
-                self.prerequisites = []
-                self.dependants = []
-
-            def depends_on(self, other_node):
-                self.prerequisites.append(other_node)
-                other_node.dependants.append(self)
-
-        nodes_by_name = {}
-        for n in packages:
-            nodes_by_name[n] = Node(n)
-        for n in packages:
-            deps = all_dependencies[n]
-            for d in sorted(deps):
-                try:
-                    nodes_by_name[n].depends_on(nodes_by_name[d])
-                except KeyError:
-                    print(n, d)
-                    raise ValueError()
-
-        for ii, job in enumerate(nodes_by_name.values()):
-            job.dependants_copy = job.dependants.copy()
-        list_of_jobs = list(nodes_by_name.values())
-
-        L = []
-        S = [job for job in list_of_jobs if len(job.dependants_copy) == 0]
-        S.sort(key=lambda job: job.name)
-        while S:
-            n = S.pop()
-            L.append(n)
-            for m in n.prerequisites:
-                m.dependants_copy.remove(n)
-                if not m.dependants_copy:
-                    S.append(m)
-        return [n.name for n in L]
-
-    def download_packages(self, pkg_plus_info):
-        for pkg, info in pkg_plus_info:
-            fn = (
-                self.paths["storage_bioconductor_download"]
-                / info["repo"]
-                / f"{pkg}_{info['version']}.tar.gz"
-            )
-            download_file(info["url"], fn)
-
-    def install_packages(self, packages):
-        count = 0
-        chunk_size = self.dockerator.cores * 2
-        for sub in chunks(packages, chunk_size):
-            print("installing bioconductor packages: ", [x[0] for x in sub])
-            remaining = len(packages) - count
-            count += chunk_size
-            print("%i to go afterwards" % remaining)
-            filenames = [
-                "%s/%s/%s_%s.tar.gz"
-                % (
-                    self.paths["docker_storage_bioconductor_download"],
-                    info["repo"],
-                    name,
-                    info["version"],
+            for k, url in urls.items():
+                cache_path = self.paths["storage_bioconductor_download"] / (
+                    k + ".PACKAGES"
                 )
-                for name, info in sub
-            ]
+                if not cache_path.exists():
+                    cache_path.parent.mkdir(exist_ok=True, parents=True)
+                    download_file(url + "src/contrib/PACKAGES", cache_path)
 
-            file_vector = "c(" + ",".join([f"'{x}'" for x in filenames]) + ")"
-            r_build_script = f"""
-            r <- getOption("repos")
-            r["CRAN"] <- "{self.dockerator.cran_mirror}"
-            options(repos=r)
-
-            lib = "{self.paths['docker_storage_bioconductor']}"
-            .libPaths(c(lib, .libPaths()))
-
-            #some packages need python - let's give em a virtualenv...
-            if (!requireNamespace("reticulate"))
-                install.packages("reticulate", lib=lib, Ncpus={self.dockerator.cores})
-            library(reticulate)
-            use_virtualenv("{self.paths['docker_storage_venv']}")
-
-            install.packages({file_vector},
-            lib=lib,
-            repos=NULL,
-            type='source',
-            install_opts = c('--no-docs', '--no-multiarch')
-            )
-
-            """
             bash_script = f"""
-            export MAKE_OPTS="-j{self.dockerator.cores}"
-            export MAKE="make -j{self.dockerator.cores}"
-            {self.paths['docker_storage_r']}/bin/R --no-save </opt/install.R
-            echo "done running R$?"
-            """
-            print(r_build_script)
-            r_build_file = tempfile.NamedTemporaryFile(suffix=".r", mode="w")
-            r_build_file.write(r_build_script)
-            r_build_file.flush()
-
-            self.dockerator._run_docker(
+{self.paths['docker_storage_python']}/bin/virtualenv /tmp/venv
+source /tmp/venv/bin/activate
+pip install pypipegraph requests future-fstrings packaging numpy
+python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconductor.py
+"""
+            env = {"URL_%s" % k.upper(): v for (k, v) in urls.items()}
+            env['BIOCONDUCTOR_VERSION'] = self.bioconductor_version
+            env['BIOCONDUCTOR_WHITELIST'] = ":".join(self.bioconductor_whitelist)
+            volumes = {
+                self.paths["storage_python"]: self.paths["docker_storage_python"],
+                self.paths["storage_venv"]: self.paths["docker_storage_venv"],
+                self.paths["storage_r"]: self.paths["docker_storage_r"],
+                Path(__file__).parent
+                / "_inside_dockfill_bioconductor.py": self.paths[
+                    "docker_storage_bioconductor"
+                ]
+                / "_inside_dockfill_bioconductor.py",
+                self.paths["storage_bioconductor_download"]: self.paths[
+                    "docker_storage_bioconductor_download"
+                ],
+                self.paths["storage_bioconductor"]: self.paths[
+                    "docker_storage_bioconductor"
+                ],
+            }
+            print("calling bioconductor install docker")
+            container_result = self.dockerator._run_docker(
                 bash_script,
-                {
-                    "volumes": combine_volumes(
-                        ro=[
-                            self.dockfill_r.volumes,
-                            {
-                                self.paths["storage_bioconductor_download"]: self.paths[
-                                    "docker_storage_bioconductor_download"
-                                ],
-                                self.paths["storage_venv"]: self.paths[
-                                    "docker_storage_venv"
-                                ],
-                            },
-                        ],
-                        rw=[self.volumes, {r_build_file.name: "/opt/install.R"}],
-                    )
-                },
+                {"volumes": volumes, "environment": env},
                 "log_bioconductor",
-                append_to_log=True,
+                root=True,
             )
-
-    def list_installed(self):
-        return set(
-            [x.name for x in self.paths["storage_bioconductor"].glob("*") if x.is_dir()]
-        )
-
-
-class RPackageInfo:
-    """Caching parser for CRAN style packages lists"""
-
-    build_in = {
-        "R",
-        "base",
-        "boot",
-        "class",
-        "cluster",
-        "codetools",
-        "compiler",
-        "datasets",
-        "foreign",
-        "graphics",
-        "grDevices",
-        "grid",
-        "KernSmooth",
-        "lattice",
-        "MASS",
-        "Matrix",
-        "methods",
-        "mgcv",
-        "nlme",
-        "nnet",
-        "parallel",
-        "rpart",
-        "spatial",
-        "splines",
-        "stats",
-        "stats4",
-        "survival",
-        "tcltk",
-        "tools",
-        "utils",
-    }
-
-    def __init__(self, base_url, name, cache_path):
-        self.name = name
-        self.base_url = base_url
-        if not self.base_url.endswith("/"):
-            self.base_url += "/"
-        self.cache_filename = cache_path / (self.name + ".PACKAGES")
-
-    def get(self):
-        """Return a dictionary:
-        package -> depends, imports, suggests, version
-        """
-        if not hasattr(self, "_packages"):
-            if not self.cache_filename.exists():
-                full_url = self.base_url + "src/contrib/PACKAGES"
-                download_file(full_url, self.cache_filename)
-            raw = self.cache_filename.read_text()
-            pkgs = {}
-            errors = []
-            for p in self.parse(raw):
-                p["name"] = p["Package"]
-                for x in ("Depends", "Suggests", "Imports", "LinkingTo"):
-                    p[x.lower()] = set(p[x]) - self.build_in
-                p["version"] = p["Version"] if p["Version"] else ""
-                p[
-                    "url"
-                ] = f"{self.base_url}src/contrib/{p['name']}_{p['version']}.tar.gz"
-                p["repo"] = self.name
-                if p["name"] in pkgs:
-                    what_to_do = duplicate_handling.get(self.name, {}).get(
-                        p["name"], "with_md5"
-                    )
-                    if what_to_do == "last":
-                        pkgs[p["name"]] = p
-                    elif what_to_do == "first":
-                        pass
-                    elif what_to_do == 'smaller' or what_to_do == 'larger':
-                        v1 = packaging.version.Version(pkgs[p['name']]['version'])
-                        v2 = packaging.version.Version(p['version'])
-                        if what_to_do == 'smaller':
-                            if v1 < v2:
-                                pass
-                            else:
-                                pkgs[p["name"]] = p
-                        else:
-                            if v1 < v2:
-                                pkgs[p["name"]] = p
-                            else:
-                                pass
-                    elif what_to_do == "with_md5":
-                        if p["version"] == pkgs[p["name"]]["version"]:
-                            if "MD5sum" in p:
-                                pkgs[p["name"]] = p
-                            elif "MD5sum" in pkgs[p["name"]]:
-                                pass
-                            else:
-                                errors.append((p, pkgs[p["name"]]))
-                        else:  # unequal version, can't decide by md5
-                            errors.append((p, pkgs[p["name"]]))
-                    else:  # pragma: no cover raise - defensive branch
-                        errors.append((p, pkgs[p["name"]]))
-
-                else:
-                    pkgs[p["name"]] = p
-            if errors:
-                print("Number of duplicate, unhandled packages", len(errors))
-                for p1, p2 in errors:
-                    import pprint
-
-                    print(p1["name"])
-                    pprint.pprint(p1)
-                    pprint.pprint(p2)
-                    print("")
-                raise ValueError("Duplicate packages within one repository!")
-
-            self._packages = pkgs
-        return self._packages
-
-    def parse(self, raw):
-        lines = raw.split("\n")
-        result = []
-        current = {}
-        for line in lines:
-            m = re.match("([A-Za-z0-9]+):", line)
-            if m:
-                key = m.groups()[0]
-                value = line[line.find(":") + 2 :].strip()
-                if key == "Package":
-                    if current:
-                        result.append(current)
-                        current = {}
-                if key in current:
-                    raise ValueError(key)
-                current[key] = value
-            elif line.strip():
-                current[key] += line.strip()
-
-        if current:
-            result.append(current)
-        for current in result:
-            for k in ["Depends", "Imports", "Suggests", "LinkingTo"]:
-                if k in current:
-                    current[k] = re.split(", ?", current[k].strip())
-                    current[k] = set(
-                        [re.findall("^[^ ()]+", x)[0] for x in current[k] if x]
-                    )
-                else:
-                    current[k] = set()
-        return result
+            print("container stdout")
+            print(container_result.decode("utf-8"))
 
 
 def download_file(url, filename):
