@@ -10,9 +10,100 @@ It's source lives at `github <https://github.com/TyberiusPrime/mbf_anysnake>`_.
 Quickstart
 ==========
 
+Write this to anysnake.toml
+
 ::
 
-   TODO
+   [base]
+   python="3.7.2"
+   R="3.5.2"
+   storage_path="global_anysnake_store"
+   code_path="code"
+
+   [global_python]
+   jupyter=''
+
+   [python]
+   pandas=">=0.23"
+
+Install mbf_anysnake via ``pip install mbf_anysnake``.
+Get a shell inside you project via ``any_snake shell``
+
+This will create the docker image, install python and R, create three virtual enviroments
+(one global, one local, one for the rpy2 matching the R and python version), 
+install jupyter and pandas, and get you a shell inside the docker.
+
+
+Full configuration documentation:
+==================================
+
+[base]
+------
+Basic configuration.
+
+ - python="version": which python to use
+ - R="version": which R to use (optional)
+ - bioconductor="version": which bioconductor to use (optional, ommit R if specifying
+   bioconductor, it will automatically be determined to match)
+ - docker_image="mbf_anysnake:18.04": use a custom docker image (not recommended)
+ - storage_path="/path": where to store python, R, the global venv, etc
+ - code_path="path": local venv and editable libraries storage location
+ - global_config="/path/to/filename.toml": import lobal configuration. Local config
+   directives beat global ones. Useful to share the storage_path between projects
+
+[run]
+------
+Configuration for the run command
+
+ - additional_volumes_ro = ["/outside_docker", "/inside_docker"]: map additional docker
+   volumes, read only
+ - additional_volumes_rw = ["/outside_docker", "/inside_docker"]: map additional docker
+   volumes, read write
+ - post_run = "cmd.sh": run this after executing any run command
+
+[global_python]
+---------------
+Python packages to install into the 'global' venv (pth defined by base:storage_path),
+optionally with version specification just like pip/requirements.txt
+
+[python]
+--------
+Python packages to install into the 'local' venv (pth defined by base:storage_path),
+optionally with version specification just like pip/requirements.txt
+
+[env]
+------
+Additional environmental variables set inside the docker.
+
+[bioconductor_whitelist]
+------------------------
+By default, bioconductor packages that need 'experimental data' or annotation packages
+are not included in the install. List them in whitelist like ``chimera=""``.
+Note that you will likely get more than just that package, since including it
+will remove the installation block on it's prerequisites, which will in turn
+possibly allow the installation of other packages that dependend on those.
+
+
+
+
+
+Command line interface
+======================
+any_snake understands the following commands:
+
+ - --help - list commands
+ - shell - get a shell inside the docker
+ - jupyter - run a jupyter server inside the docker (must have jupyter in either venv)
+ - run whatever - run an arbitrary command inside the docker
+ - rebuild - rebuild one or all all editable python packages 
+ - show-config - show the config as actually parsed (including global_config)
+
+
+
+
+
+
+
 
 
 
@@ -28,14 +119,12 @@ Contents
    License <license>
    Authors <authors>
    Changelog <changelog>
-   Module Reference <api/modules>
 
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 
 .. _toctree: http://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html
