@@ -172,7 +172,7 @@ class DockFill_Bioconductor:
             )
 
     def ensure(self):
-        done_file = self.paths["storage_bioconductor"] / "done.txt"
+        done_file = self.paths["storage_bioconductor"] / "done.sentinel"
         if not done_file.exists():
             info = self.bioconductor_relase_information(self.dockerator)
             # bioconductor can really only be reliably installed with the CRAN
@@ -230,8 +230,12 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 "log_bioconductor",
                 root=True,
             )
-            print("container stdout")
-            print(container_result.decode("utf-8"))
+            #print("container stdout")
+            #print(container_result.decode("utf-8"))
+            if not done_file.exists():
+                print(f"bioconductor install failed, check {self.paths['log_bioconductor']}")
+            else:
+                print('bioconductor install done')
 
 
 def download_file(url, filename):
