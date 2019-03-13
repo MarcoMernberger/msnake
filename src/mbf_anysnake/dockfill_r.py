@@ -2,7 +2,6 @@
 
 import re
 from pathlib import Path
-import tempfile
 import requests
 from .util import combine_volumes
 

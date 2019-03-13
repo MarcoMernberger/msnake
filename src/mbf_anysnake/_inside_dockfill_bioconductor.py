@@ -1,13 +1,11 @@
+# *- coding: future_fstrings -*-
 import subprocess
 import sys
 import logging
-import time
 import requests
 import shutil
-import random
 import os
 import re
-import tempfile
 from pathlib import Path
 import packaging.version
 import pypipegraph as ppg
@@ -35,10 +33,10 @@ blacklist = {
     "xps",  # needs libroot-core-dev, no longer in ubuntu 18.04
     "gpuR",  # unknown opencl error - possibly fixable
     "cudaBayesreg",  # won't compile, removed from cran on mantainer's request
-    'permGPU', # insists on not respecting CUDA_HOME enviroment variable.
-    'BiocSklearn', # won't use the right python? possible fixable
-    'rPython', # can't find python so - fixable? 
-    'SnakeCharmR', # can't find python so - fixable? 
+    "permGPU",  # insists on not respecting CUDA_HOME enviroment variable.
+    "BiocSklearn",  # won't use the right python? possible fixable
+    "rPython",  # can't find python so - fixable?
+    "SnakeCharmR",  # can't find python so - fixable?
     # windows only packages are automatically detected
 }
 packages_needing_X = {
@@ -48,7 +46,7 @@ packages_needing_X = {
     "rpanel",
     "GroupSeq",
     "HierO",
-    "HomoPolymer",  #  - seems to compile, but crashes on GDK call
+    "HomoPolymer",  # - seems to compile, but crashes on GDK call
     "gWidgets2tcltk",
     "gWidgetstcltk",
     "iplots",
@@ -71,8 +69,8 @@ blacklist_per_version = {
         "bgx",  # won't compile?
         "MSGFplus",  # apperantly can't evaluate java version - possibly fixable
         "KoNLP",  # some kind of scala/java version change? msising value where TRUE/FALSE needed
-        'flipflop', # won't compile
-        'dSimer', #  won't compile
+        "flipflop",  # won't compile
+        "dSimer",  # won't compile
     }
 }
 
@@ -119,6 +117,7 @@ build_in = {
 
 def install_bioconductor():
     bc_version = os.environ["BIOCONDUCTOR_VERSION"]
+    cran_mode = os.environ['CRAN_MODE']
     cran_packages = load_packages("cran", os.environ["URL_CRAN"]).get()
     bioc_software_packages = load_packages("software", os.environ["URL_SOFTWARE"]).get()
     bioc_annotation_packages = load_packages(
@@ -132,39 +131,64 @@ def install_bioconductor():
         bioc_data_packages,
     ]
 
-    to_prune = set()
-    to_prune.update(blacklist)
-    if bc_version in blacklist_per_version:
-        to_prune.update(blacklist_per_version[bc_version])
-    to_prune.update(bioc_annotation_packages.keys())
-    to_prune.update(bioc_data_packages.keys())
-    to_prune.update(windows_only_packages(pkgs))
 
     whitelist = os.environ["BIOCONDUCTOR_WHITELIST"].split(":")
 
     logging.basicConfig(
         filename="/dockerator/bioconductor/ppg.log", level=logging.INFO, filemode="w"
     )
-    cpus = int(ppg.util.CPUs() * 1.25)
+    cpus = int(ppg.util.CPUs() * 1.25) # rule of thumb to achieve maximum throughupt
     ppg.new_pipegraph(
         invariant_status_filename="/dockerator/bioconductor/.ppg_status",
         resource_coordinator=ppg.resource_coordinators.LocalSystem(
             max_cores_to_use=cpus, interactive=False
         ),
-    )  # rule of thumb to achieve maximum throughupt
+    )  
     jobs, prune_because_of_missing_preqs = build_jobs(pkgs)
+    # now we have jobs for *every* R package
+    # which we now need to filter down
+
+    to_prune = set()
+    to_prune.update(bioc_annotation_packages.keys())
+    to_prune.update(bioc_data_packages.keys())
     to_prune.update(prune_because_of_missing_preqs)
+    prune(jobs, to_prune)
+
+    if cran_mode == 'minimal':
+        prune(jobs, cran_packages)
+        already_unpruned = set()
+        for k in bioc_software_packages:
+            for j in jobs[k]:
+                unprune(j, already_unpruned)
+        prune(jobs, to_prune)
+
+    already_unpruned = set()
+    for k in whitelist:
+        if k in jobs:
+            for j in jobs[k]:
+                unprune(j, already_unpruned)
+    if "_full_" in whitelist:
+        for k in bioc_software_packages:
+            for j in jobs[k]:
+                unprune(j, already_unpruned)
+
+    # still need to apply the blacklist, no matter whether __full__ was set!
+    to_prune = set()
+    to_prune.update(windows_only_packages(pkgs))
+    to_prune.update(blacklist)
+    if bc_version in blacklist_per_version:
+        to_prune.update(blacklist_per_version[bc_version])
+    prune(jobs, to_prune)
+    
+    ppg.util.global_pipegraph.connect_graph()
+    ppg.run_pipegraph()
+    write_done_sentinel(whitelist)
+
+def prune(jobs, to_prune):
     for k in to_prune:
         if k in jobs:
             for j in jobs[k]:  # download and install job.
                 j.prune()
-    for k in whitelist:
-        for j in jobs[k]:
-            unprune(j, set())
-
-    ppg.util.global_pipegraph.connect_graph()
-    ppg.run_pipegraph()
-    write_done_sentinel()
 
 def unprune(job, seen):
     if not job.job_id in seen:
@@ -172,6 +196,7 @@ def unprune(job, seen):
         job._pruned = False
         for p in job.prerequisites:
             unprune(p, seen)
+
 
 def windows_only_packages(pkgs):
     """Find out which packages are windows only"""
@@ -190,8 +215,10 @@ def load_packages(name, url):
     return info
 
 
-def write_done_sentinel():
-    Path("/dockerator/bioconductor/done.sentinel").write_text("done")
+def write_done_sentinel(whitelist):
+    Path("/dockerator/bioconductor/done.sentinel").write_text(
+        "done" + ":".join(sorted(whitelist))
+    )
 
 
 def get_preqs(info):
@@ -241,13 +268,12 @@ def job_download(info):
         r = requests.get(info["url"], stream=True)
         if r.status_code != 200:
             raise ValueError("Error return on %s %s " % (info["url"], r.status_code))
-        count = 0
         with open(str(target_fn) + "_temp", "wb") as op:
             for block in r.iter_content(1024 * 1024):
                 op.write(block)
         shutil.move(str(target_fn) + "_temp", str(target_fn))
 
-    job = ppg.FileGeneratingJob(target_fn, download)
+    job = ppg.TempFileGeneratingJob(target_fn, download)
     job.ignore_code_changes()
     return job
 
@@ -261,12 +287,12 @@ def job_install(info):
     def do():
         R_cmd = ["/dockerator/R/bin/R", "--no-save"]
         r_build_script = """
-        
+
         lib = "/dockerator/bioconductor/"
         .libPaths(c(lib, .libPaths()))
 
         #some packages need python - let's give em a virtualenv...
-        if (%s) 
+        if (%s)
         {
             if (requireNamespace("reticulate"))
             {
@@ -307,12 +333,13 @@ def job_install(info):
         env["PYTHONPATH"] = ":".join(
             env.get("PYTHONPATH", "").split(":") + [x for x in sys.path if x]
         )
-        env["LIBRARY_PATH"] = ":".join(env.get("LIBRARY_PATH", "").split(":") + [
-            "/dockeractor/python/lib"
-        ])
-        env["LD_LIBRARY_PATH"] = ":".join(env.get("LD_LIBRARY_PATH", "").split(":") + [
-            "/dockeractor/python/lib"
-        ])
+        env["LIBRARY_PATH"] = ":".join(
+            env.get("LIBRARY_PATH", "").split(":") + ["/dockeractor/python/lib"]
+        )
+        env["LD_LIBRARY_PATH"] = ":".join(
+            env.get("LD_LIBRARY_PATH", "").split(":") + ["/dockeractor/python/lib"]
+        )
+        env['MAKEFLAGS'] = "-j %i" % (ppg.util.CPUs(),)
 
         p = subprocess.Popen(
             " ".join(R_cmd),
@@ -333,7 +360,7 @@ def job_install(info):
             print(stderr)
             raise ValueError("R error return code")
         else:
-            pass # sentinel file get's written by R upon completion
+            pass  # sentinel file get's written by R upon completion
 
     job = ppg.FileGeneratingJob(sentinel_file, do)
     job.ignore_code_changes()
@@ -379,8 +406,8 @@ class RPackageInfo:
                     elif what_to_do == "first":
                         pass
                     elif what_to_do == "smaller" or what_to_do == "larger":
-                        v1 = packaging.version.Version(pkgs[p["name"]]["version"])
-                        v2 = packaging.version.Version(p["version"])
+                        v1 = parse_version(pkgs[p["name"]]["version"])
+                        v2 = parse_version(p["version"])
                         if what_to_do == "smaller":
                             if v1 < v2:
                                 pass
@@ -452,6 +479,12 @@ class RPackageInfo:
                     current[k] = set()
         return result
 
+def parse_version(v):
+    try:
+        return packaging.version.Version(v)
+    except packaging.version.InvalidVersion:
+        # handle R versions that look like 2.42-3.1
+        return packaging.version.Version(v.replace('-','.'))
 
 if __name__ == "__main__":
     install_bioconductor()

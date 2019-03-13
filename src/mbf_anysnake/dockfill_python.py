@@ -155,10 +155,10 @@ class _DockerFillVenv:
                 f"dockerator.{self.name}_venv_{name}.pip.log"
             )
             target_path = self.clone_path / name
-            with open(self.paths[log_key + "_clone"], "wb") as log_file:
+            with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
                 if not target_path.exists():
                     print("\tcloning", name)
-                    result.append(target_path)
+                    result.add(target_path)
                     url = url_spec
                     if url.startswith("@"):
                         url = url[1:]
@@ -177,13 +177,13 @@ class _DockerFillVenv:
                         )
                     if method == "git":
                         subprocess.check_call(
-                            ["git", "clone", url, target_path],
+                            ["git", "clone", url, str(target_path)],
                             stdout=log_file,
                             stderr=log_file,
                         )
                     elif method == "hg":
                         subprocess.check_call(
-                            ["hg", "clone", url, target_path],
+                            ["hg", "clone", url, str(target_path)],
                             stdout=log_file,
                             stderr=log_file,
                         )
@@ -216,15 +216,15 @@ class _DockerFillVenv:
         pkg_string = []
         for k, v in packages.items():
             if k in code_packages:
-                pkg_string.append(f"-e /project/code/{k}")
+                pkg_string.append(f'-e "/project/code/{k}"')
             else:
-                pkg_string.append("%s%s" % (k, v))
+                pkg_string.append('"%s%s"' % (k, v))
         pkg_string = " ".join(pkg_string)
         print(f"\tpip install {pkg_string}")
         self.dockerator._run_docker(
             f"""
 #!/bin/bash
-    {self.target_path_inside_docker}/bin/pip install "{pkg_string}"
+    {self.target_path_inside_docker}/bin/pip install {pkg_string}
     echo "done"
     """,
             {
@@ -326,8 +326,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.volumes = {
             self.paths["code"]: dockerator.paths[f"docker_code"],
             self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
-                        
-                        }
+        }
         self.packages = self.dockerator.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()
@@ -429,7 +428,7 @@ echo "done"
 
 
 def version_is_compatible(dep_def, version):
-    if version == "": # not previously installed, I guess
+    if version == "":  # not previously installed, I guess
         return False
     if dep_def == "":
         return True
