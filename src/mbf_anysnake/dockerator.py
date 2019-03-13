@@ -43,6 +43,7 @@ class Dockerator:
         bioconductor_whitelist,
         cran_mode,
         storage_path,
+        storage_per_hostname,
         code_path,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
@@ -54,8 +55,11 @@ class Dockerator:
             self.cran_mirror += "/"
 
         self.storage_path = Path(storage_path)
+        self.storage_per_hostname = storage_per_hostname
+
         storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
         code_path = Path(code_path).absolute()
+        self.storage_per_hostname = bool(storage_per_hostname)
 
         self.paths = {
             "storage": storage_path,

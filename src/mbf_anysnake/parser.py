@@ -79,6 +79,7 @@ def parsed_to_dockerator(parsed):
         storage_path = Path(base["storage_path"])
     else:
         storage_path = Path("version_store")
+    storage_per_hostname = bool(base.get("storage_per_hostname", False))
 
     if "code_path" in base:
         code_path = Path(base["code_path"])
@@ -110,6 +111,7 @@ def parsed_to_dockerator(parsed):
         bioconductor_whitelist,
         cran_mode,
         storage_path,
+        storage_per_hostname,
         code_path,
         environment_variables=environment_variables,
     )

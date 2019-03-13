@@ -15,11 +15,20 @@ class DockFill_Bioconductor:
         self.bioconductor_version = dockerator.bioconductor_version
         self.bioconductor_whitelist = dockerator.bioconductor_whitelist
         self.cran_mode = dockerator.cran_mode
+
+        self.done_string = (
+            "done:" + self.cran_mode + ":" + ":".join(self.bioconductor_whitelist)
+        )
+        postfix = Path("bioconductor" / self.bioconductor_version)
+        bc_path = self.paths["storage"] / postfix
+        if not self.is_done(bc_path) and self.dockerater.storage_per_hostname:
+            for d in dockerator.paths["storage"].parent.glob("*"):
+                if d.is_dir() and self.is_done(d / postfix):
+                    bc_path = d / postfix
+                    break
         self.paths.update(
             {
-                "storage_bioconductor": (
-                    self.paths["storage"] / "bioconductor" / self.bioconductor_version
-                ),
+                "storage_bioconductor": bc_path,
                 "docker_storage_bioconductor": "/dockerator/bioconductor",
                 "storage_bioconductor_download": (
                     self.paths["storage"]
@@ -47,6 +56,10 @@ class DockFill_Bioconductor:
                 "docker_storage_bioconductor_download"
             ],
         }
+
+    def is_done(self, path):
+        done_file = path / "done.sentinel"
+        return done_file.exists() and done_file.read_text() == self.done_string
 
     def pprint(self):
         print(f"  Bioconductor version={self.bioconductor_version}")
@@ -172,7 +185,7 @@ class DockFill_Bioconductor:
 
     def ensure(self):
         done_file = self.paths["storage_bioconductor"] / "done.sentinel"
-        should = "done:" + self.cran_mode + ':' + ":".join(self.bioconductor_whitelist)
+        should = self.done_string
         if not done_file.exists() or done_file.read_text() != should:
             info = self.bioconductor_relase_information(self.dockerator)
             # bioconductor can really only be reliably installed with the CRAN
@@ -231,7 +244,7 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 "log_bioconductor",
                 root=True,
             )
-            if not done_file.exists() or done_file.read_text() != should:
+            if self.is_done(self.paths["storage_bioconductor"]):
                 print(
                     f"bioconductor install failed, check {self.paths['log_bioconductor']}"
                 )

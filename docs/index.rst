@@ -70,7 +70,12 @@ Basic configuration.
   for bioconductora
 - docker_image="mbf_anysnake:18.04": optinoal, use a custom docker image 
   (not recommended, you need a ton of dependencies for CRAN packages)
-- storage_path="/path": where to store python, R, the global venv, etc
+- storage_path="/path": where to store python, R, the global venv, etc. Environmental
+  variables are supported with ``${VARIABLE}`` syntax.
+- storeage_per_hostname="true" - treat the last part of the storge_path as optional and
+  go up one directory and search for other, completed builds that we could use instead.
+  This applies to python, R, rpy2 and bioconductor (subject to matching whitelist and cran
+  mode, see below), but not to the python global virtual env.
 - code_path="path": local venv and editable libraries storage location
 - global_config="/path/to/filename.toml": import lobal configuration. Local config
   directives overwrite global ones. Useful to share e.g. the storage_path and global 

@@ -7,7 +7,7 @@ import subprocess
 import packaging.version
 import pkg_resources
 from pathlib import Path
-from .util import combine_volumes
+from .util import combine_volumes, find_storage_path_from_other_machine
 
 
 class DockFill_Python:
@@ -15,10 +15,11 @@ class DockFill_Python:
         self.dockerator = dockerator
         self.python_version = self.dockerator.python_version
         self.paths = self.dockerator.paths
+
         self.paths.update(
             {
-                "storage_python": (
-                    self.paths["storage"] / "python" / self.python_version
+                "storage_python": find_storage_path_from_other_machine(
+                    self.dockerator, Path("python") / self.python_version
                 ),
                 "docker_storage_python": "/dockerator/python",
                 "docker_code": "/project/code",
@@ -139,9 +140,7 @@ class _DockerFillVenv:
                         v, installed_versions.get(self.safe_name(k), "")
                     )
                 )
-                or (
-                    k in code_names and 
-                    k in had_to_clone)
+                or (k in code_names and k in had_to_clone)
             }
         extra_reqs = []
         for c in had_to_clone:
@@ -265,7 +264,7 @@ class _DockerFillVenv:
         )
         if still_missing:
             msg = f"Installation of packages failed: {still_missing}\n"
-        elif return_code['StatusCode'] != 0:
+        elif return_code["StatusCode"] != 0:
             msg = f"Installation of packages failed: return code was not 0 (was {return_code})\n"
         else:
             msg = ""
@@ -367,10 +366,14 @@ class DockFill_CodeVenv(_DockerFillVenv):
                     first_line = input[:n_pos]
                     if (
                         first_line
-                        == f"#!{self.paths['docker_storage_venv']}/bin/python".encode('utf-8')
+                        == f"#!{self.paths['docker_storage_venv']}/bin/python".encode(
+                            "utf-8"
+                        )
                     ):
                         output = (
-                            f"#!{self.paths['docker_code_venv']}/bin/python".encode('utf-8')
+                            f"#!{self.paths['docker_code_venv']}/bin/python".encode(
+                                "utf-8"
+                            )
                             + input[n_pos:]
                         )
                         output_fn.write_bytes(output)

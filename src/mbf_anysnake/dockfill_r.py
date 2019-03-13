@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 import requests
-from .util import combine_volumes
+from .util import combine_volumes, find_storage_path_from_other_machine
 
 
 class DockFill_R:
@@ -15,7 +15,9 @@ class DockFill_R:
 
         self.paths.update(
             {
-                "storage_r": self.paths["storage"] / "R" / self.R_version,
+                "storage_r": find_storage_path_from_other_machine(
+                    self.dockerator, Path("R" / self.R_version)
+                ),
                 "docker_storage_r": "/dockerator/R",
                 "log_r": self.paths["log_storage"]
                 / f"dockerator.R.{self.R_version}.log",
@@ -82,9 +84,10 @@ class DockFill_Rpy2:
         self.paths.update(
             {
                 "storage_rpy2": (
-                    self.paths["storage"]
-                    / "rpy2"
-                    / f"{self.python_version}_{self.R_version}"
+                    find_storage_path_from_other_machine(
+                        self.dockerator,
+                        Path("rpy2" / f"{self.python_version}_{self.R_version}"),
+                    )
                 ),
                 "docker_storage_rpy2": "/dockerator/rpy2",
                 "log_rpy2": self.paths["log_storage"]
