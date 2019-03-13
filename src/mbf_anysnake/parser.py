@@ -94,7 +94,9 @@ def parsed_to_dockerator(parsed):
     local_pip_packages = parsed.get("python", {})
     check_pip_definitions(global_pip_packages)
     check_pip_definitions(local_pip_packages)
-    bioconductor_whitelist = list(parsed.get("bioconductor_whitelist", {}).keys())
+    bioconductor_whitelist = base.get("bioconductor_whitelist", [])
+    if not isinstance(bioconductor_whitelist, list):
+        raise ValueError("bioconductor_whitelist must be a list")
     cran_mode = base.get("cran", "full")
     if not cran_mode in ("minimal", "full"):
         raise ValueError("cran must be one of ('full', 'minimal')")
