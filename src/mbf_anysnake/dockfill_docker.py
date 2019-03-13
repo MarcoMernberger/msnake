@@ -31,21 +31,24 @@ class DockFill_Docker:
         else:
             bs = (
                 self.paths["docker_image_build_scripts"]
-                / self.dockerator.docker_image
+                / self.dockerator.docker_image[: self.dockerator.docker_image.rfind(":")]
                 / "build.sh"
             )
             if bs.exists():
                 print("having to call", bs)
-                subprocess.check_call(
-                    [str(bs)],
-                    cwd=str(
-                        self.paths["docker_image_build_scripts"]
-                        / self.dockerator.docker_image
-                    ),
-                )
+                subprocess.check_call([str(bs)], cwd=bs.parent)
             else:
                 print(bs, "not found")
                 client.images.pull(self.dockerator.docker_image)
 
     def pprint(self):
         print(f"  docker_image = {self.dockerator.docker_image}")
+
+    def get_dockerfile_hash(self, docker_image_name):
+        import hashlib
+
+        dockerfile = (
+            self.paths["docker_image_build_scripts"] / docker_image_name / "Dockerfile"
+        )
+        tag = hashlib.md5(dockerfile.read_bytes()).hexdigest()
+        return tag

@@ -57,14 +57,6 @@ class Dockerator:
         storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
         code_path = Path(code_path).absolute()
 
-        self.docker_image = str(docker_image)
-        self.python_version = python_version
-        self.bioconductor_version = bioconductor_version
-        self.global_python_packages = global_python_packages
-        self.local_python_packages = local_python_packages
-        self.bioconductor_whitelist = bioconductor_whitelist
-        self.cran_mode = cran_mode
-
         self.paths = {
             "storage": storage_path,
             "code": code_path,
@@ -72,10 +64,23 @@ class Dockerator:
             "log_code": code_path / "logs",
         }
 
+        dfd = DockFill_Docker(self)
+        if docker_image.endswith(":%md5sum%"):
+            docker_image = docker_image[: docker_image.rfind(":")]
+            docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
+        self.docker_image = str(docker_image)
+
+        self.python_version = python_version
+        self.bioconductor_version = bioconductor_version
+        self.global_python_packages = global_python_packages
+        self.local_python_packages = local_python_packages
+        self.bioconductor_whitelist = bioconductor_whitelist
+        self.cran_mode = cran_mode
+
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
         self.strategies = [
-            DockFill_Docker(self),
+            dfd,
             dfp,
             DockFill_CodeVenv(
                 self, dfp, dfgv
@@ -153,10 +158,14 @@ class Dockerator:
         allow_writes=False,
     ):
         env = env.copy()
-        for k in self.environment_variables.keys(): # don't use update here - won't work with the toml object
+        for (
+            k
+        ) in (
+            self.environment_variables.keys()
+        ):  # don't use update here - won't work with the toml object
             env[k] = self.environment_variables[k]
-        env['ANYSNAKE_PROJECT_PATH'] = Path('.').absolute()
-        env['ANYSNAKE_USER'] = pwd.getpwuid(os.getuid())[0]
+        env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
+        env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
@@ -172,7 +181,7 @@ class Dockerator:
         tf.write(f"export PATH={path_str}\n")
         tf.write("source /dockerator/code_venv/bin/activate\n")
         tf.write(bash_script)
-        print('bash script', bash_script)
+        print("bash script", bash_script)
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
