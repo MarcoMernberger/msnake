@@ -3,6 +3,7 @@
 from pathlib import Path
 from docker import from_env as docker_from_env
 import time
+import pwd
 import tempfile
 import shutil
 import subprocess
@@ -139,7 +140,7 @@ class Dockerator:
             if hasattr(s, "rebuild"):
                 s.rebuild(args)
 
-    def run(
+    def _build_cmd(
         self,
         bash_script,
         env={},
@@ -151,7 +152,10 @@ class Dockerator:
         allow_writes=False,
     ):
         env = env.copy()
-        env.update(self.environment_variables)
+        for k in self.environment_variables.keys(): # don't use update here - won't work with the toml object
+            env[k] = self.environment_variables[k]
+        env['ANYSNAKE_PROJECT_PATH'] = Path('.').absolute()
+        env['ANYSNAKE_USER'] = pwd.getpwuid(os.getuid())[0]
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
@@ -167,6 +171,7 @@ class Dockerator:
         tf.write(f"export PATH={path_str}\n")
         tf.write("source /dockerator/code_venv/bin/activate\n")
         tf.write(bash_script)
+        print('bash script', bash_script)
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
@@ -228,8 +233,17 @@ class Dockerator:
                     print('  ' + x)
                 last_was_dash = False
         print('')
+        return cmd, tf
+
+    def run(self, *args, **kwargs):
+        cmd, tf = self._build_cmd(*args, **kwargs)
         p = subprocess.Popen(cmd)
         p.communicate()
+
+    def run_non_interactive(self, *args, **kwargs):
+        cmd, tf = self._build_cmd(*args, **kwargs)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return p.communicate()
 
     def _run_docker(
         self, bash_script, run_kwargs, log_name, root=False, append_to_log=False
@@ -257,7 +271,7 @@ class Dockerator:
         )
         try:
             container.start()
-            container.wait()
+            return_code = container.wait()
         except KeyboardInterrupt:
             container.kill()
         container_result = container.logs(stdout=True, stderr=True)
@@ -270,7 +284,7 @@ class Dockerator:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)
-        return container_result
+        return return_code, container_result
 
     def build(
         self,
