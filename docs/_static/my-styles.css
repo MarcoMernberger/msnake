@@ -17,3 +17,11 @@
 .class dl:nth-child(odd) {
 	background-color:#DDDDDD;
 }
+h2 { 
+	border-top: 1px solid #7f7f7f;
+}
+
+h3 { 
+	padding-left:5pt;
+	font-size:1.5em;
+}

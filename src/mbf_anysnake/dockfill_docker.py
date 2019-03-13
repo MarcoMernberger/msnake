@@ -37,9 +37,11 @@ class DockFill_Docker:
             if bs.exists():
                 print("having to call", bs)
                 subprocess.check_call(
-                    [bs],
-                    cwd=self.paths["docker_image_build_scripts"]
-                    / self.dockerator.docker_image,
+                    [str(bs)],
+                    cwd=str(
+                        self.paths["docker_image_build_scripts"]
+                        / self.dockerator.docker_image
+                    ),
                 )
             else:
                 print(bs, "not found")

@@ -69,6 +69,8 @@ cd pyenv/plugins/python-build
 ./install.sh
 
 export MAKE_OPTS=-j{self.dockerator.cores}
+export CONFIGURE_OPTS=--enable-shared
+export PYTHON_CONFIGURE_OPTS=--enable-shared
 python-build {python_version} {self.paths['docker_storage_python']}
 {self.paths['docker_storage_python']}/bin/pip install -U pip virtualenv
 chown {os.getuid()}:{os.getgid()} {self.paths['docker_storage_python']} -R
@@ -158,7 +160,7 @@ class _DockerFillVenv:
             self.install_pip_packages(to_install, had_to_clone, extra_reqs)
 
     def safe_name(self, name):
-        return pkg_resources.safe_name(name)
+        return pkg_resources.safe_name(name).lower()
 
     def clone_code_packages(self, code_packages):
         result = set()
@@ -168,7 +170,7 @@ class _DockerFillVenv:
                 f"dockerator.{self.name}_venv_{name}.pip.log"
             )
             target_path = self.clone_path / name
-            with open(self.paths[log_key + "_clone"], "wb") as log_file:
+            with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
                 if not target_path.exists():
                     print("\tcloning", name)
                     result.add(name)
@@ -190,13 +192,13 @@ class _DockerFillVenv:
                         )
                     if method == "git":
                         subprocess.check_call(
-                            ["git", "clone", url, target_path],
+                            ["git", "clone", url, str(target_path)],
                             stdout=log_file,
                             stderr=log_file,
                         )
                     elif method == "hg":
                         subprocess.check_call(
-                            ["hg", "clone", url, target_path],
+                            ["hg", "clone", url, str(target_path)],
                             stdout=log_file,
                             stderr=log_file,
                         )
@@ -229,9 +231,9 @@ class _DockerFillVenv:
         pkg_string = []
         for k, v in packages.items():
             if k in code_packages:
-                pkg_string.append(f"-e /project/code/{k}")
+                pkg_string.append(f'-e "/project/code/{k}"')
             else:
-                pkg_string.append("%s%s" % (k, v))
+                pkg_string.append('"%s%s"' % (k, v))
         for k, extra in extra_reqs:
             pkg_string.append(f"-e /project/code/{k}[{extra}]")
 
@@ -239,7 +241,7 @@ class _DockerFillVenv:
         print(f"\tpip install {pkg_string}")
         return_code, logs = self.dockerator._run_docker(
             f"""
-    source {self.target_path_inside_docker}/bin/activate
+#!/bin/bash
     {self.target_path_inside_docker}/bin/pip install {pkg_string}
     """,
             {
@@ -259,7 +261,7 @@ class _DockerFillVenv:
             self.dockerator.major_python_version
         )
         still_missing = set([self.safe_name(k) for k in packages.keys()]).difference(
-            installed_now
+            [self.safe_name(k) for k in installed_now]
         )
         if still_missing:
             msg = f"Installation of packages failed: {still_missing}\n"

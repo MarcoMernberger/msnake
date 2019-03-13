@@ -93,10 +93,10 @@ def parsed_to_dockerator(parsed):
     local_pip_packages = parsed.get("python", {})
     check_pip_definitions(global_pip_packages)
     check_pip_definitions(local_pip_packages)
-    cran_packages = parsed.get("cran", {})
-    for key, v in cran_packages.items():
-        if v and not re.match("(==)?[0-9.]+", v):
-            raise ValueError(f"Invalid CRAN version specification {key}: '{v}'")
+    bioconductor_whitelist = list(parsed.get("bioconductor_whitelist", {}).keys())
+    cran_mode = base.get("cran", "full")
+    if not cran_mode in ("minimal", "full"):
+        raise ValueError("cran must be one of ('full', 'minimal')")
 
     environment_variables = parsed.get("env", {})
 
@@ -107,7 +107,8 @@ def parsed_to_dockerator(parsed):
         R_version,
         global_pip_packages,
         local_pip_packages,
-        cran_packages,
+        bioconductor_whitelist,
+        cran_mode,
         storage_path,
         code_path,
         environment_variables=environment_variables,
