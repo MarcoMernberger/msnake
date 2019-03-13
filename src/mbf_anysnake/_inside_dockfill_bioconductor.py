@@ -62,6 +62,25 @@ packages_needing_X = {
 }
 blacklist.update(packages_needing_X)
 blacklist_per_version = {
+    "3.6": {
+        "RWekajars",  # java version - possibly fixable
+        "bgx",  # won't compile?
+        "rstan",  # won't compile?
+        "bigmemoryExtras",  # incompatible bigmemory version?
+        "MSGFplus",  # apperantly can't evaluate java version - possibly fixable
+        "rTANDEM",  # invalid c++
+        "psichomics",  # incompatible with Rcpp package installed
+        "beachmat",  # incompatible with Rcpp package installed
+    },
+    "3.7": {
+        "bgx",  # won't compile?
+        "MSGFplus",  # apperantly can't evaluate java version - possibly fixable
+        "rTANDEM",  # invalid c++
+        'pathifier', # incompatible princurve version
+        'ClusterSignificance',# incompatible princurve version
+        'ggtree', # incompatible ggplot version
+        'ggcyto', # incompatible ggplot version
+    },
     "3.8": {
         "GEOquery",  # geoquery needs redr 1.3.1 which was released two months *after* bioconductor 3.8
         "ggtree",  # requests tidytree >=0.1.9 but only 0.2.0 released a month later exports the necessary function
@@ -71,7 +90,7 @@ blacklist_per_version = {
         "KoNLP",  # some kind of scala/java version change? msising value where TRUE/FALSE needed
         "flipflop",  # won't compile
         "dSimer",  # won't compile
-    }
+    },
 }
 
 manual_dependencies = {  # because the cran annotation sometimes simply is wrong
@@ -117,7 +136,7 @@ build_in = {
 
 def install_bioconductor():
     bc_version = os.environ["BIOCONDUCTOR_VERSION"]
-    cran_mode = os.environ['CRAN_MODE']
+    cran_mode = os.environ["CRAN_MODE"]
     cran_packages = load_packages("cran", os.environ["URL_CRAN"]).get()
     bioc_software_packages = load_packages("software", os.environ["URL_SOFTWARE"]).get()
     bioc_annotation_packages = load_packages(
@@ -131,19 +150,18 @@ def install_bioconductor():
         bioc_data_packages,
     ]
 
-
     whitelist = os.environ["BIOCONDUCTOR_WHITELIST"].split(":")
 
     logging.basicConfig(
         filename="/dockerator/bioconductor/ppg.log", level=logging.INFO, filemode="w"
     )
-    cpus = int(ppg.util.CPUs() * 1.25) # rule of thumb to achieve maximum throughupt
+    cpus = int(ppg.util.CPUs() * 1.25)  # rule of thumb to achieve maximum throughupt
     ppg.new_pipegraph(
         invariant_status_filename="/dockerator/bioconductor/.ppg_status",
         resource_coordinator=ppg.resource_coordinators.LocalSystem(
             max_cores_to_use=cpus, interactive=False
         ),
-    )  
+    )
     jobs, prune_because_of_missing_preqs = build_jobs(pkgs)
     # now we have jobs for *every* R package
     # which we now need to filter down
@@ -154,7 +172,7 @@ def install_bioconductor():
     to_prune.update(prune_because_of_missing_preqs)
     prune(jobs, to_prune)
 
-    if cran_mode == 'minimal':
+    if cran_mode == "minimal":
         prune(jobs, cran_packages)
         already_unpruned = set()
         for k in bioc_software_packages:
@@ -179,16 +197,18 @@ def install_bioconductor():
     if bc_version in blacklist_per_version:
         to_prune.update(blacklist_per_version[bc_version])
     prune(jobs, to_prune)
-    
+
     ppg.util.global_pipegraph.connect_graph()
     ppg.run_pipegraph()
-    write_done_sentinel(whitelist)
+    write_done_sentinel(cran_mode, whitelist)
+
 
 def prune(jobs, to_prune):
     for k in to_prune:
         if k in jobs:
             for j in jobs[k]:  # download and install job.
                 j.prune()
+
 
 def unprune(job, seen):
     if not job.job_id in seen:
@@ -215,9 +235,9 @@ def load_packages(name, url):
     return info
 
 
-def write_done_sentinel(whitelist):
+def write_done_sentinel(cran_mode, whitelist):
     Path("/dockerator/bioconductor/done.sentinel").write_text(
-        "done" + ":".join(sorted(whitelist))
+        "done:" + cran_mode + ":" + ":".join(sorted(whitelist))
     )
 
 
@@ -339,7 +359,7 @@ def job_install(info):
         env["LD_LIBRARY_PATH"] = ":".join(
             env.get("LD_LIBRARY_PATH", "").split(":") + ["/dockeractor/python/lib"]
         )
-        env['MAKEFLAGS'] = "-j %i" % (ppg.util.CPUs(),)
+        env["MAKEFLAGS"] = "-j %i" % (ppg.util.CPUs(),)
 
         p = subprocess.Popen(
             " ".join(R_cmd),
@@ -479,12 +499,14 @@ class RPackageInfo:
                     current[k] = set()
         return result
 
+
 def parse_version(v):
     try:
         return packaging.version.Version(v)
     except packaging.version.InvalidVersion:
         # handle R versions that look like 2.42-3.1
-        return packaging.version.Version(v.replace('-','.'))
+        return packaging.version.Version(v.replace("-", "."))
+
 
 if __name__ == "__main__":
     install_bioconductor()
