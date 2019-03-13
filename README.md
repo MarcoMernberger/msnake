@@ -46,9 +46,9 @@ Motivations in brief:
        bioconductor uses package verisons that were not released when the
        bioconductor release happen. But it's a useful approximation for automatisation) 
  * some bioconductor packages require annotation/experimental data: 
-       filter these packages by default, but allow user to request them,
-       (otherwise the installation get's up to 50GB - the minimalistic set is
-       'reasonable' at 21GB)
+       filter these packages by default, but allow user to request them 
+       (this is a space saving measure. Full bioconductor software + full cran: 50 gb,
+       Bioconductor minus annotation: 21 GB, Bioconductor minus and minimal cran: 5GB),
  * cran package annotation is somewhat messy (duplicate entries, non existing
        versions, missing dependencies) -> hotfix.
  * install as much of cran/bioconductor as possible: Don't fight with the stuff

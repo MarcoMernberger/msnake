@@ -68,6 +68,7 @@ RUN apt-get install -y \
   gtk2.0 \
   gzip\
   hostname\
+  imagemagick \
   init-system-helpers\
   intltool-debian\
   jags \
