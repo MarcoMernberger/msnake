@@ -62,3 +62,4 @@ Motivations in brief:
 
 
 
+mbf_anysnake follows [semver](https://semver.org)

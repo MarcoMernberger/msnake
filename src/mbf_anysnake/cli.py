@@ -187,6 +187,11 @@ _full_=""
         )
         print("Written default anysnake.toml")
 
+@main.command()
+def version():
+    import mbf_anysnake
+    print("mbf_anysnake version %s" % mbf_anysnake.__version__)
+
 
 if __name__ == "__main__":
     main()
