@@ -4,10 +4,8 @@ import requests
 import time
 import shutil
 from pathlib import Path
-import tempfile
 import re
 
-from .util import combine_volumes
 
 class DockFill_Bioconductor:
     def __init__(self, dockerator, dockfill_r):
@@ -16,6 +14,7 @@ class DockFill_Bioconductor:
         self.paths = self.dockerator.paths
         self.bioconductor_version = dockerator.bioconductor_version
         self.bioconductor_whitelist = dockerator.bioconductor_whitelist
+        self.cran_mode = dockerator.cran_mode
         self.paths.update(
             {
                 "storage_bioconductor": (
@@ -143,7 +142,7 @@ class DockFill_Bioconductor:
             all_info = cls.fetch_bioconductor_release_information()
             if not dockerator.bioconductor_version in all_info:
                 raise ValueError(
-                    f"Could not find bioconductor {dockerator.bioconductor_version } - check https://bioconductor.org/about/release-announcements/"
+                    f"Could not find bioconductor {dockerator.bioconductor_version} - check https://bioconductor.org/about/release-announcements/"
                 )
             info = all_info[dockerator.bioconductor_version]
             major = info["r_major_version"]
@@ -173,7 +172,8 @@ class DockFill_Bioconductor:
 
     def ensure(self):
         done_file = self.paths["storage_bioconductor"] / "done.sentinel"
-        if not done_file.exists():
+        should = "done:" + self.cran_mode + ":".join(self.bioconductor_whitelist)
+        if not done_file.exists() or done_file.read_text() != should:
             info = self.bioconductor_relase_information(self.dockerator)
             # bioconductor can really only be reliably installed with the CRAN
             # packages against which it was developed
@@ -205,8 +205,9 @@ pip install pypipegraph requests future-fstrings packaging numpy
 python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconductor.py
 """
             env = {"URL_%s" % k.upper(): v for (k, v) in urls.items()}
-            env['BIOCONDUCTOR_VERSION'] = self.bioconductor_version
-            env['BIOCONDUCTOR_WHITELIST'] = ":".join(self.bioconductor_whitelist)
+            env["BIOCONDUCTOR_VERSION"] = self.bioconductor_version
+            env["BIOCONDUCTOR_WHITELIST"] = ":".join(self.bioconductor_whitelist)
+            env["CRAN_MODE"] = self.cran_mode
             volumes = {
                 self.paths["storage_python"]: self.paths["docker_storage_python"],
                 self.paths["storage_venv"]: self.paths["docker_storage_venv"],
@@ -224,18 +225,18 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 ],
             }
             print("calling bioconductor install docker")
-            container_result = self.dockerator._run_docker(
+            self.dockerator._run_docker(
                 bash_script,
                 {"volumes": volumes, "environment": env},
                 "log_bioconductor",
                 root=True,
             )
-            #print("container stdout")
-            #print(container_result.decode("utf-8"))
-            if not done_file.exists():
-                print(f"bioconductor install failed, check {self.paths['log_bioconductor']}")
+            if not done_file.exists() or done_file.read_text() != should:
+                print(
+                    f"bioconductor install failed, check {self.paths['log_bioconductor']}"
+                )
             else:
-                print('bioconductor install done')
+                print("bioconductor install done")
 
 
 def download_file(url, filename):

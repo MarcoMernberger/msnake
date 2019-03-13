@@ -145,6 +145,7 @@ RUN apt-get install -y \
   liblzo2-2\
   libmagic-dev\
   libmagick++-dev \
+  libmariadbclient18 \
   libmecab-dev\
   libmecab-dev\
   libmime-charset-perl\

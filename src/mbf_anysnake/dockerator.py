@@ -40,11 +40,12 @@ class Dockerator:
         global_python_packages,
         local_python_packages,
         bioconductor_whitelist,
+        cran_mode,
         storage_path,
         code_path,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
-        environment_variables = {}
+        environment_variables={},
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -61,6 +62,7 @@ class Dockerator:
         self.global_python_packages = global_python_packages
         self.local_python_packages = local_python_packages
         self.bioconductor_whitelist = bioconductor_whitelist
+        self.cran_mode = cran_mode
 
         self.paths = {
             "storage": storage_path,
@@ -183,12 +185,14 @@ class Dockerator:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:
             ro_volumes.extend([df.volumes for df in self.strategies])
-            rw_volumes.extend([df.rw_volumes for df in self.strategies if hasattr(df, 'rw_volumes')])
+            rw_volumes.extend(
+                [df.rw_volumes for df in self.strategies if hasattr(df, "rw_volumes")]
+            )
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
 
-        cmd = ["docker", "run", "-it", '--rm']
+        cmd = ["docker", "run", "-it", "--rm"]
         for outside_path, v in volumes.items():
             inside_path, mode = v
             cmd.append("-v")
@@ -213,20 +217,20 @@ class Dockerator:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 
         cmd.extend(["-w", "/project"])
-        cmd.append('--network=host')
+        cmd.append("--network=host")
         cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
         last_was_dash = True
         for x in cmd:
-            if x.startswith('-') and not x.startswith('--'):
+            if x.startswith("-") and not x.startswith("--"):
                 print("  " + x, end=" ")
                 last_was_dash = True
             else:
                 if last_was_dash:
                     print(x)
                 else:
-                    print('  ' + x)
+                    print("  " + x)
                 last_was_dash = False
-        print('')
+        print("")
         p = subprocess.Popen(cmd)
         p.communicate()
 
@@ -299,8 +303,7 @@ class Dockerator:
                 volumes.update(additional_volumes)
             container_result = self._run_docker(
                 build_cmds,
-                {"volumes": volumes, "environment": environment,
-                 },
+                {"volumes": volumes, "environment": environment},
                 log_name,
                 root=root,
             )

@@ -10,7 +10,7 @@ It's source lives at `github <https://github.com/TyberiusPrime/mbf_anysnake>`_.
 Quickstart
 ==========
 
-Write this to anysnake.toml
+Write this to your_project_folder/anysnake.toml
 
 ::
 
@@ -27,49 +27,79 @@ Write this to anysnake.toml
    pandas=">=0.23"
 
 Install mbf_anysnake via ``pip install mbf_anysnake``.
-Get a shell inside you project via ``any_snake shell``
 
-This will create the docker image, install python and R, create three virtual enviroments
-(one global, one local, one for the rpy2 matching the R and python version), 
-install jupyter and pandas, and get you a shell inside the docker.
+Get a shell inside you project via ``anysnake shell``.
+
+This will 
+
+- create the docker image
+- install python and R
+- create three virtual enviroments (one global, one local, one for the rpy2 matching the R and python version)
+- install jupyter (inside the global venv)
+- install pandas (inside the local venv)
+- install rpy2 (inside the rpy2 venv
+- start an interactive docker with a fish shell
+
+Features
+===========
+
+- Leverage pypi nd pip and allow work on selected libraries for python development
+- Sane bioconductor and CRAN version managment (date based on bioconductor release date)
+- 'full' install of CRAN and bioconductor 
+
+
 
 
 Full configuration documentation:
 ==================================
+Configuration is in `toml format <https://github.com/toml-lang/toml>`_ in a file
+called anysnake.toml. You can create a default file by calling ``anysnake
+default-config``
+
+The following sections are supported:
 
 [base]
 ------
 Basic configuration.
 
- - python="version": which python to use
- - R="version": which R to use (optional)
- - bioconductor="version": which bioconductor to use (optional, ommit R if specifying
-   bioconductor, it will automatically be determined to match)
- - docker_image="mbf_anysnake:18.04": use a custom docker image (not recommended)
- - storage_path="/path": where to store python, R, the global venv, etc
- - code_path="path": local venv and editable libraries storage location
- - global_config="/path/to/filename.toml": import lobal configuration. Local config
-   directives beat global ones. Useful to share the storage_path between projects
+- python="3.7.2": which python to use
+- R="3.5.3": which R to use (optional)
+- bioconductor="3.8": which bioconductor to use (optional, omit R if specifying
+  bioconductor, it will automatically be determined to match)
+- cran="full" or cran="minimal" - install all CRAN packages, or just the ones necessary
+  for bioconductora
+- docker_image="mbf_anysnake:18.04": optinoal, use a custom docker image 
+  (not recommended, you need a ton of dependencies for CRAN packages)
+- storage_path="/path": where to store python, R, the global venv, etc
+- code_path="path": local venv and editable libraries storage location
+- global_config="/path/to/filename.toml": import lobal configuration. Local config
+  directives overwrite global ones. Useful to share e.g. the storage_path and global 
+  python packages between projects
 
 [run]
 ------
 Configuration for the run command
 
- - additional_volumes_ro = ["/outside_docker", "/inside_docker"]: map additional docker
-   volumes, read only
- - additional_volumes_rw = ["/outside_docker", "/inside_docker"]: map additional docker
-   volumes, read write
- - post_run = "cmd.sh": run this after executing any run command
+- additional_volumes_ro = [["/outside_docker", "/inside_docker"]]: map additional docker
+  volumes, read only
+- additional_volumes_rw = [["/outside_docker", "/inside_docker"]]: map additional docker
+  volumes, read write
+- post_run = "cmd.sh": run this after executing any run command
 
 [global_python]
 ---------------
 Python packages to install into the 'global' venv (pth defined by base:storage_path),
-optionally with version specification just like pip/requirements.txt
+optionally with version specification just like pip/requirements.txt.
+Example ``jupyter=""`` or ``pandas=">=0.23"``.
 
 [python]
 --------
 Python packages to install into the 'local' venv (pth defined by base:storage_path),
-optionally with version specification just like pip/requirements.txt
+optionally with version specification just like pip/requirements.txt.
+Example ``jupyter=""`` or ``pandas=">=0.23"``.
+
+For an editable libray: ``dppd="@git+https://github.com/TyberiusPrime/dppd"``
+(use "@hg+" for mercurial).
 
 [env]
 ------
@@ -78,36 +108,26 @@ Additional environmental variables set inside the docker.
 [bioconductor_whitelist]
 ------------------------
 By default, bioconductor packages that need 'experimental data' or annotation packages
-are not included in the install. List them in whitelist like ``chimera=""``.
+are not included in the install. List them in [bioconductor_whitelist] like ``chimera=""``.
+
 Note that you will likely get more than just that package, since including it
 will remove the installation block on it's prerequisites, which will in turn
 possibly allow the installation of other packages that dependend on those.
 
-
-
+You can also install every bioconductor package by specifiying ``_full_==''``
 
 
 Command line interface
 ======================
 any_snake understands the following commands:
 
- - --help - list commands
- - shell - get a shell inside the docker
- - jupyter - run a jupyter server inside the docker (must have jupyter in either venv)
- - run whatever - run an arbitrary command inside the docker
- - rebuild - rebuild one or all all editable python packages 
- - show-config - show the config as actually parsed (including global_config)
-
-
-
-
-
-
-
-
-
-
-
+- --help - list commands
+- shell - get a shell inside the docker
+- jupyter - run a jupyter server inside the docker (must have jupyter in either venv)
+- run whatever - run an arbitrary command inside the docker
+- rebuild - rebuild one or all all editable python packages 
+- show-config - show the config as actually parsed (including global_config)
+- default-config - write a default config to anysnake.toml if it is not present.
 
 Contents
 ========
