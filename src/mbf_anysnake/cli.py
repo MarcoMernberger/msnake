@@ -161,6 +161,11 @@ cran="full"
 storage_path="/var/lib/anysnake"
 # local venv, editable libraries
 code_path="code"
+# install all bioconductor packages whether they need experimental or annotation
+# data or not.
+# bioconductor_whitelist=["_full_"]
+# or install selected packages otherwise omited like this
+# bioconductor_whitelist=["chimera"]
 
 [run]
 additional_volumes_ro = [['/opt', '/opt']]
@@ -177,14 +182,10 @@ dppd="@git+https://github.com/TyberiusPrime/dppd"
 [env]
 INSIDE_ANYSNAKE="yes"
 
-[bioconductor_whitelist]
-# install all bioconductor packages whether they need experimental or annotation
-# data or not.
-_full_=""
-# or install selected packages otherwise omited like this
-# chimera=""
+
 """
-        )
+)
+        
         print("Written default anysnake.toml")
 
 
