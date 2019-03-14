@@ -7,7 +7,7 @@ import subprocess
 import packaging.version
 import pkg_resources
 from pathlib import Path
-from .util import combine_volumes
+from .util import combine_volumes, find_storage_path_from_other_machine
 
 
 class DockFill_Python:
@@ -15,10 +15,11 @@ class DockFill_Python:
         self.dockerator = dockerator
         self.python_version = self.dockerator.python_version
         self.paths = self.dockerator.paths
+
         self.paths.update(
             {
-                "storage_python": (
-                    self.paths["storage"] / "python" / self.python_version
+                "storage_python": find_storage_path_from_other_machine(
+                    self.dockerator, Path("python") / self.python_version
                 ),
                 "docker_storage_python": "/dockerator/python",
                 "docker_code": "/project/code",
@@ -145,8 +146,21 @@ class _DockerFillVenv:
                 )
                 or (k in code_names and k in had_to_clone)
             }
+        extra_reqs = []
+        for c in had_to_clone:
+            cfg_file = Path(self.paths["code"] / c / "setup.cfg")
+            if cfg_file.exists():
+                import configparser
+
+                parser = configparser.ConfigParser()
+                cfg = parser.read(cfg_file)
+                try:
+                    parser["options.extras_require"]["testing"]
+                    extra_reqs.append((c, "testing"))
+                except KeyError:
+                    pass
         if to_install:
-            self.install_pip_packages(to_install, had_to_clone)
+            self.install_pip_packages(to_install, had_to_clone, extra_reqs)
             return True
         return False
 
@@ -164,7 +178,7 @@ class _DockerFillVenv:
             with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
                 if not target_path.exists():
                     print("\tcloning", name)
-                    result.add(target_path)
+                    result.add(name)
                     url = url_spec
                     if url.startswith("@"):
                         url = url[1:]
@@ -217,7 +231,7 @@ class _DockerFillVenv:
                 result[self.safe_name(name)] = version
         return result
 
-    def install_pip_packages(self, packages, code_packages):
+    def install_pip_packages(self, packages, code_packages, extra_reqs):
         """packages are parse_requirements results with method == 'pip'"""
         pkg_string = []
         for k, v in packages.items():
@@ -225,13 +239,15 @@ class _DockerFillVenv:
                 pkg_string.append(f'-e "/project/code/{k}"')
             else:
                 pkg_string.append('"%s%s"' % (k, v))
+        for k, extra in extra_reqs:
+            pkg_string.append(f"-e /project/code/{k}[{extra}]")
+
         pkg_string = " ".join(pkg_string)
         print(f"\tpip install {pkg_string}")
-        self.dockerator._run_docker(
+        return_code, logs = self.dockerator._run_docker(
             f"""
 #!/bin/bash
     {self.target_path_inside_docker}/bin/pip install {pkg_string}
-    echo "done"
     """,
             {
                 "volumes": combine_volumes(
@@ -253,10 +269,15 @@ class _DockerFillVenv:
             [self.safe_name(k) for k in installed_now]
         )
         if still_missing:
+            msg = f"Installation of packages failed: {still_missing}\n"
+        elif return_code["StatusCode"] != 0:
+            msg = f"Installation of packages failed: return code was not 0 (was {return_code})\n"
+        else:
+            msg = ""
+        if msg:
+            print(self.paths[f"log_{self.name}_venv_pip"].read_text())
             raise ValueError(
-                f"Installation of packages failed: {still_missing}\n"
-                + "Check log in "
-                + str(self.paths[f"log_{self.name}_venv_pip"])
+                msg + "Check log in " + str(self.paths[f"log_{self.name}_venv_pip"])
             )
 
 
@@ -338,10 +359,8 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.clone_path = self.paths["code_clones"]
         self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
-        self.volumes = {
-            self.paths["code"]: dockerator.paths[f"docker_code"],
-            self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"],
-        }
+        self.volumes = {self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"]}
+        self.rw_volumes = {self.paths["code"]: dockerator.paths[f"docker_code"]}
         self.packages = self.dockerator.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()
@@ -357,19 +376,25 @@ class DockFill_CodeVenv(_DockerFillVenv):
         for input_fn in source_dir.glob("*"):
             output_fn = target_dir / input_fn.name
             if not output_fn.exists():
-                input = input_fn.read_text()
-                if input.startswith("#"):
-                    n_pos = input.find("\n")
+                input = input_fn.read_bytes()
+                if input.startswith(b"#"):
+                    n_pos = input.find(b"\n")
                     first_line = input[:n_pos]
                     if (
                         first_line
-                        == f"#!{self.paths['docker_storage_venv']}/bin/python"
+                        == f"#!{self.paths['docker_storage_venv']}/bin/python".encode(
+                            "utf-8"
+                        )
                     ):
                         output = (
-                            f"#!{self.paths['docker_code_venv']}/bin/python"
+                            f"#!{self.paths['docker_code_venv']}/bin/python".encode(
+                                "utf-8"
+                            )
                             + input[n_pos:]
                         )
-                        output_fn.write_text(output)
+                        output_fn.write_bytes(output)
+                else:
+                    output_fn.write_bytes(input)
             output_fn.chmod(input_fn.stat().st_mode)
         pth_path = (
             self.paths["code_venv"]
@@ -441,6 +466,10 @@ echo "done"
         return False
 
     def rebuild(self, packages):
+        if packages:
+            self.packages = {k: self.packages[k] for k in packages}
+            if not self.packages:
+                raise ValueError("No packages matching your spec")
         self.fill_venv(rebuild=True)
 
     def fill_venv(self, rebuild=False):

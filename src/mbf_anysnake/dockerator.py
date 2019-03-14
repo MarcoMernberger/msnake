@@ -3,6 +3,7 @@
 from pathlib import Path
 from docker import from_env as docker_from_env
 import time
+import pwd
 import tempfile
 import shutil
 import subprocess
@@ -42,6 +43,7 @@ class Dockerator:
         bioconductor_whitelist,
         cran_mode,
         storage_path,
+        storage_per_hostname,
         code_path,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
@@ -54,17 +56,11 @@ class Dockerator:
             self.cran_mirror += "/"
 
         self.storage_path = Path(storage_path)
-        storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
-        code_path = Path(code_path).absolute()
+        self.storage_per_hostname = storage_per_hostname
 
-        self.docker_image = str(docker_image)
-        self.python_version = python_version
-        self.bioconductor_version = bioconductor_version
-        self.global_python_packages = global_python_packages
-        self.local_python_packages = local_python_packages
-        self.bioconductor_whitelist = bioconductor_whitelist
-        self.cran_mode = cran_mode
-        self.post_build_cmd = post_build_cmd
+        storage_path = (storage_path / docker_image[:docker_image.rfind(':')]).absolute()
+        code_path = Path(code_path).absolute()
+        self.storage_per_hostname = bool(storage_per_hostname)
 
         self.paths = {
             "storage": storage_path,
@@ -73,10 +69,24 @@ class Dockerator:
             "log_code": code_path / "logs",
         }
 
+        dfd = DockFill_Docker(self)
+        if docker_image.endswith(":%md5sum%"):
+            docker_image = docker_image[: docker_image.rfind(":")]
+            docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
+        self.docker_image = str(docker_image)
+
+        self.python_version = python_version
+        self.bioconductor_version = bioconductor_version
+        self.global_python_packages = global_python_packages
+        self.local_python_packages = local_python_packages
+        self.bioconductor_whitelist = bioconductor_whitelist
+        self.cran_mode = cran_mode
+        self.post_build_cmd = post_build_cmd
+
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
         self.strategies = [
-            DockFill_Docker(self),
+            dfd,
             dfp,
             DockFill_CodeVenv(
                 self, dfp, dfgv
@@ -150,7 +160,7 @@ class Dockerator:
             if hasattr(s, "rebuild"):
                 s.rebuild(args)
 
-    def run(
+    def _build_cmd(
         self,
         bash_script,
         env={},
@@ -162,7 +172,14 @@ class Dockerator:
         allow_writes=False,
     ):
         env = env.copy()
-        env.update(self.environment_variables)
+        for (
+            k
+        ) in (
+            self.environment_variables.keys()
+        ):  # don't use update here - won't work with the toml object
+            env[k] = self.environment_variables[k]
+        env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
+        env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
@@ -178,6 +195,7 @@ class Dockerator:
         tf.write(f"export PATH={path_str}\n")
         tf.write("source /dockerator/code_venv/bin/activate\n")
         tf.write(bash_script)
+        print("bash script", bash_script)
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
@@ -241,8 +259,17 @@ class Dockerator:
                     print("  " + x)
                 last_was_dash = False
         print("")
+        return cmd, tf
+
+    def run(self, *args, **kwargs):
+        cmd, tf = self._build_cmd(*args, **kwargs)
         p = subprocess.Popen(cmd)
         p.communicate()
+
+    def run_non_interactive(self, *args, **kwargs):
+        cmd, tf = self._build_cmd(*args, **kwargs)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return p.communicate()
 
     def _run_docker(
         self, bash_script, run_kwargs, log_name, root=False, append_to_log=False
@@ -270,7 +297,7 @@ class Dockerator:
         )
         try:
             container.start()
-            container.wait()
+            return_code = container.wait()
         except KeyboardInterrupt:
             container.kill()
         container_result = container.logs(stdout=True, stderr=True)
@@ -283,8 +310,7 @@ class Dockerator:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)
-        container.remove()
-        return container_result
+        return return_code, container_result
 
     def build(
         self,

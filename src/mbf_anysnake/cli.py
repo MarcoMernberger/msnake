@@ -1,6 +1,7 @@
 import click
 from pathlib import Path
 from mbf_anysnake import parse_requirements, parsed_to_dockerator
+import subprocess
 
 
 config_file = "anysnake.toml"
@@ -79,13 +80,13 @@ def shell(no_build=False, allow_writes=False):
         d.ensure()
     else:
         d.ensure_just_docker()
-    d.run(
+    print(d.run(
         "/usr/bin/fish",
         allow_writes=allow_writes,
         home_files=home_files,
         volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
-    )
+    ))
 
 
 @main.command()
@@ -99,13 +100,13 @@ def run(cmd, no_build=False):
     else:
         d.ensure_just_docker()
 
-    d.run(
+    print(d.run(
         " ".join(cmd),
         allow_writes=False,
         home_files=home_files,
         volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
-    )
+    ))
     post_run = config.get('run', {}).get('post_run', False)
     if post_run:
         import subprocess
@@ -133,6 +134,16 @@ def jupyter(no_build=False):
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
         ports=[(host_port, 8888)],
     )
+
+@main.command()
+@click.argument('modules', nargs=-1)
+@click.option("--report-only/--no-report-only", default=False)
+def test(modules, report_only):
+    """Run pytest on all (or a subset) modules that were in the code path and had a tests/conftest.py"""
+    from . import testing
+    d, config = get_dockerator()
+    d.ensure()
+    testing.run_tests(modules, d, config, report_only)
 
 
 @main.command()

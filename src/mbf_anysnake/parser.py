@@ -64,7 +64,7 @@ def parsed_to_dockerator(parsed):
     if "docker_image" in base:
         docker_image = base["docker_image"]
     else:
-        docker_image = "mbf_anysnake:18.04"
+        docker_image = "mbf_anysnake_18.04:%md5sum%"
 
     if "bioconductor" in base:
         bioconductor_version = base["bioconductor"]
@@ -79,6 +79,7 @@ def parsed_to_dockerator(parsed):
         storage_path = Path(base["storage_path"])
     else:
         storage_path = Path("version_store")
+    storage_per_hostname = bool(base.get("storage_per_hostname", False))
 
     post_build_cmd = parsed.get('build', {}).get('post_storage_build', False)
     if not isinstance(post_build_cmd, str) and not post_build_cmd is False:
@@ -116,6 +117,7 @@ def parsed_to_dockerator(parsed):
         bioconductor_whitelist,
         cran_mode,
         storage_path,
+        storage_per_hostname,
         code_path,
         environment_variables=environment_variables,
         post_build_cmd=post_build_cmd,
