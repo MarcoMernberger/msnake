@@ -315,3 +315,14 @@ RUN apt-get install -y \
 RUN ln -s  /usr/bin/nvcc /bin/nvcc
 RUN mkdir -p /usr/local/cuda/bin
 RUN ln -s  /usr/bin/nvcc  /usr/local/cuda/bin/nvcc
+RUN echo "u1000:test123" | chpasswd
+RUN echo "u1001:test123" | chpasswd
+RUN echo "u1002:test123" | chpasswd
+RUN echo "u1003:test123" | chpasswd
+RUN echo "u1004:test123" | chpasswd
+RUN usermod -g sudo u1000
+RUN usermod -g sudo u1001
+RUN usermod -g sudo u1002
+RUN usermod -g sudo u1003
+RUN usermod -g sudo u1004
+RUN apt-get install sudo unzip
