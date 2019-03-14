@@ -57,7 +57,7 @@ class Dockerator:
         self.storage_path = Path(storage_path)
         self.storage_per_hostname = storage_per_hostname
 
-        storage_path = (storage_path / docker_image.replace(":", "-")).absolute()
+        storage_path = (storage_path / docker_image[:docker_image.rfind(':')]).absolute()
         code_path = Path(code_path).absolute()
         self.storage_per_hostname = bool(storage_per_hostname)
 
