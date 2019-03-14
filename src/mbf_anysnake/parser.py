@@ -81,7 +81,7 @@ def parsed_to_dockerator(parsed):
         storage_path = Path("version_store")
 
     post_build_cmd = parsed.get('build', {}).get('post_storage_build', False)
-    if not isinstance(post_build_cmd, str):
+    if not isinstance(post_build_cmd, str) and not post_build_cmd is False:
         raise ValueError('post_storage_build must be a string')
 
     if "code_path" in base:
