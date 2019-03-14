@@ -260,6 +260,7 @@ RUN apt-get install -y \
   make\
   man-db\
   mawk\
+  mercurial\
   mesa-common-dev \
   mount\
   mpack\
