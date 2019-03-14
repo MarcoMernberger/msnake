@@ -36,7 +36,7 @@ class DockFill_Docker:
             )
             if bs.exists():
                 print("having to call", bs)
-                subprocess.check_call([str(bs)], cwd=bs.parent)
+                subprocess.check_call([str(bs)], cwd=str(bs.parent))
             else:
                 print(bs, "not found")
                 client.images.pull(self.dockerator.docker_image)

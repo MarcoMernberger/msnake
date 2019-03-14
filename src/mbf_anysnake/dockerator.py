@@ -142,8 +142,6 @@ class Dockerator:
             run_post_build |= s.ensure()
             if do_time:
                 print(s.__class__.__name__, time.time() - start)
-        print('run_post_build', run_post_build)
-        print('self.post_build_cmd', self.post_build_cmd)
         if run_post_build and self.post_build_cmd:
             import subprocess
 

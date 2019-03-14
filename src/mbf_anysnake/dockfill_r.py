@@ -16,7 +16,7 @@ class DockFill_R:
         self.paths.update(
             {
                 "storage_r": find_storage_path_from_other_machine(
-                    self.dockerator, Path("R" / self.R_version)
+                    self.dockerator, Path("R") / self.R_version
                 ),
                 "docker_storage_r": "/dockerator/R",
                 "log_r": self.paths["log_storage"]
@@ -86,7 +86,7 @@ class DockFill_Rpy2:
                 "storage_rpy2": (
                     find_storage_path_from_other_machine(
                         self.dockerator,
-                        Path("rpy2" / f"{self.python_version}_{self.R_version}"),
+                        Path("rpy2") / f"{self.python_version}_{self.R_version}",
                     )
                 ),
                 "docker_storage_rpy2": "/dockerator/rpy2",

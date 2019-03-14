@@ -19,7 +19,7 @@ class DockFill_Bioconductor:
         self.done_string = (
             "done:" + self.cran_mode + ":" + ":".join(self.bioconductor_whitelist)
         )
-        postfix = Path("bioconductor" / self.bioconductor_version)
+        postfix = Path("bioconductor") / self.bioconductor_version
         bc_path = self.paths["storage"] / postfix
         if not self.is_done(bc_path) and self.dockerater.storage_per_hostname:
             for d in dockerator.paths["storage"].parent.glob("*"):
