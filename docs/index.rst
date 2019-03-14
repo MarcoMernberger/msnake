@@ -89,7 +89,12 @@ Configuration for the run command
   volumes, read only
 - additional_volumes_rw = [["/outside_docker", "/inside_docker"]]: map additional docker
   volumes, read write
-- post_run = "cmd.sh": run this after executing any run command
+- post_run = "cmd.sh": run this after executing any run command - cwd is project dir
+
+[build]
+- post_storage_build = "cmd.sh": run this if a storage build was run  - cwd is
+  storge_path
+
 
 [global_python]
 ---------------
@@ -133,6 +138,7 @@ any_snake understands the following commands:
 - rebuild - rebuild one or all all editable python packages 
 - show-config - show the config as actually parsed (including global_config)
 - default-config - write a default config to anysnake.toml if it is not present.
+- freeze - show toml defining installed versions.
 
 Contents
 ========

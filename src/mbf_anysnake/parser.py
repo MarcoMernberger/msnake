@@ -81,6 +81,10 @@ def parsed_to_dockerator(parsed):
         storage_path = Path("version_store")
     storage_per_hostname = bool(base.get("storage_per_hostname", False))
 
+    post_build_cmd = parsed.get('build', {}).get('post_storage_build', False)
+    if not isinstance(post_build_cmd, str):
+        raise ValueError('post_storage_build must be a string')
+
     if "code_path" in base:
         code_path = Path(base["code_path"])
         del base["code_path"]
@@ -116,6 +120,7 @@ def parsed_to_dockerator(parsed):
         storage_per_hostname,
         code_path,
         environment_variables=environment_variables,
+        post_build_cmd=post_build_cmd,
     )
 
 

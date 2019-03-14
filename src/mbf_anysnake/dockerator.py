@@ -48,6 +48,7 @@ class Dockerator:
         cores=None,
         cran_mirror="https://cloud.r-project.org",
         environment_variables={},
+        post_build_cmd=False,
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -80,6 +81,7 @@ class Dockerator:
         self.local_python_packages = local_python_packages
         self.bioconductor_whitelist = bioconductor_whitelist
         self.cran_mode = cran_mode
+        self.post_build_cmd = post_build_cmd
 
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
@@ -134,11 +136,19 @@ class Dockerator:
         self.paths["log_storage"].mkdir(parents=False, exist_ok=True)
         self.paths["log_code"].mkdir(parents=False, exist_ok=True)
 
+        run_post_build = False
         for s in self.strategies:
             start = time.time()
-            s.ensure()
+            run_post_build |= s.ensure()
             if do_time:
                 print(s.__class__.__name__, time.time() - start)
+        print('run_post_build', run_post_build)
+        print('self.post_build_cmd', self.post_build_cmd)
+        if run_post_build and self.post_build_cmd:
+            import subprocess
+
+            p = subprocess.Popen(str(Path(str(self.post_build_cmd)).absolute()), cwd=str(self.paths["storage"]))
+            p.communicate()
 
     def ensure_just_docker(self):
         for s in self.strategies:
@@ -189,7 +199,7 @@ class Dockerator:
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
-        ro_volumes = [{tf.name: "/opt/run.sh"}]
+        ro_volumes = [{tf.name: "/dockertor/run.sh"}]
         rw_volumes = [{os.path.abspath("."): "/project"}]
         for h in home_files:
             p = Path("~").expanduser() / h
@@ -211,7 +221,7 @@ class Dockerator:
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
 
         cmd = ["docker", "run", "-it", "--rm"]
-        for outside_path, v in volumes.items():
+        for outside_path, v in sorted(volumes.items()):
             inside_path, mode = v
             cmd.append("-v")
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
@@ -236,7 +246,7 @@ class Dockerator:
 
         cmd.extend(["-w", "/project"])
         cmd.append("--network=host")
-        cmd.extend([self.docker_image, "/bin/bash", "/opt/run.sh"])
+        cmd.extend([self.docker_image, "/bin/bash", "/dockertor/run.sh"])
         last_was_dash = True
         for x in cmd:
             if x.startswith("-") and not x.startswith("--"):
@@ -267,7 +277,7 @@ class Dockerator:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {tf.name: "/opt/run.sh"}
+        volumes = {tf.name: "/dockertor/run.sh"}
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
@@ -283,7 +293,7 @@ class Dockerator:
         tf.write(bash_script)
         tf.flush()
         container = client.containers.create(
-            docker_image, "/bin/bash /opt/run.sh", **run_kwargs
+            docker_image, "/bin/bash /dockertor/run.sh", **run_kwargs
         )
         try:
             container.start()
@@ -315,6 +325,9 @@ class Dockerator:
         version_check=None,
         root=False,
     ):
+        """Build a target_dir (into temp, rename on success),
+        returns True if it was build, False if it was already present
+        """
         target_dir = target_dir.absolute()
         if not target_dir.exists():
             if version_check is not None:
@@ -345,6 +358,9 @@ class Dockerator:
             else:
                 # un-atomic copy (across device borders!), atomic rename -> safe
                 build_dir.rename(target_dir)
+            return True
+        else:
+            return False
 
     @property
     def major_python_version(self):

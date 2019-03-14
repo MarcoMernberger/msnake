@@ -250,6 +250,17 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 )
             else:
                 print("bioconductor install done")
+            return True
+        return False
+
+    def freeze(self):
+        return {
+            "base": {
+                "bioconductor_version": self.bioconductor_version,
+                "bioconductor_whitelist": self.bioconductor_whitelist,
+                'cran': self.cran_mode,
+            }
+        }
 
 
 def download_file(url, filename):
