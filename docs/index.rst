@@ -133,6 +133,7 @@ any_snake understands the following commands:
 - rebuild - rebuild one or all all editable python packages 
 - show-config - show the config as actually parsed (including global_config)
 - default-config - write a default config to anysnake.toml if it is not present.
+- freeze - show toml defining installed versions.
 
 Contents
 ========

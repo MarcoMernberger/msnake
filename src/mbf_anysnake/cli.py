@@ -106,10 +106,9 @@ def run(cmd, no_build=False):
         volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
     )
-    post_run = config.get("run", {}).get("post_run", False)
+    post_run = config.get('run', {}).get('post_run', False)
     if post_run:
         import subprocess
-
         p = subprocess.Popen(post_run)
         p.communicate()
 
@@ -190,15 +189,40 @@ INSIDE_ANYSNAKE="yes"
 
 
 """
-        )
-
+)
+        
         print("Written default anysnake.toml")
+
+def merge_dicts(a, b, path=None):
+    "merges b into a"
+    if path is None: path = []
+    for key in b:
+        if key in a:
+            if isinstance(a[key], dict) and isinstance(b[key], dict):
+                merge_dicts(a[key], b[key], path + [str(key)])
+            elif a[key] == b[key]:
+                pass # same leaf value
+            else:
+                raise Exception('Conflict at %s' % '.'.join(path + [str(key)]))
+        else:
+            a[key] = b[key]
+    return a
+
+@main.command()
+def freeze():
+    """Output installed packages in anysnake.toml format"""
+    import tomlkit
+    d, parsed = get_dockerator()
+    output = {}
+    for s in d.strategies:
+        if hasattr(s, 'freeze'):
+            merge_dicts(output, s.freeze())
+    print(tomlkit.dumps(output))
 
 
 @main.command()
 def version():
     import mbf_anysnake
-
     print("mbf_anysnake version %s" % mbf_anysnake.__version__)
 
 

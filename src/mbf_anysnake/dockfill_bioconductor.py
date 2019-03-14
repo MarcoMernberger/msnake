@@ -172,7 +172,7 @@ class DockFill_Bioconductor:
 
     def ensure(self):
         done_file = self.paths["storage_bioconductor"] / "done.sentinel"
-        should = "done:" + self.cran_mode + ':' + ":".join(self.bioconductor_whitelist)
+        should = "done:" + self.cran_mode + ":" + ":".join(self.bioconductor_whitelist)
         if not done_file.exists() or done_file.read_text() != should:
             info = self.bioconductor_relase_information(self.dockerator)
             # bioconductor can really only be reliably installed with the CRAN
@@ -239,6 +239,15 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 print("bioconductor install done")
             return True
         return False
+
+    def freeze(self):
+        return {
+            "base": {
+                "bioconductor_version": self.bioconductor_version,
+                "bioconductor_whitelist": self.bioconductor_whitelist,
+                'cran': self.cran_mode,
+            }
+        }
 
 
 def download_file(url, filename):

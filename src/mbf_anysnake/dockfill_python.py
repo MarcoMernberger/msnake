@@ -88,6 +88,9 @@ echo "done"
                 f"Unknown python version {version} - check https://www.python.org/doc/versions/"
             )
 
+    def freeze(self):
+        return {"base": {"python": self.python_version}}
+
 
 re_github = r"[A-Za-z0-9-]+\/[A-Za-z0-9]+"
 
@@ -304,6 +307,15 @@ echo "done"
 """,
         )
 
+    def freeze(self):
+        """Return a toml string with all the installed versions"""
+        result = {}
+        for k, v in self.find_installed_package_versions(
+            self.dockerator.major_python_version
+        ).items():
+            result[k] = f"{v}"
+        return {"global_python": result}
+
 
 class DockFill_CodeVenv(_DockerFillVenv):
     def __init__(self, dockerator, dockfill_python, dockfill_global_venv):
@@ -434,6 +446,16 @@ echo "done"
     def fill_venv(self, rebuild=False):
         super().fill_venv(rebuild=rebuild)
         return False
+
+    def freeze(self):
+        """Return a toml string with all the installed versions"""
+        result = {}
+        for k, v in self.find_installed_package_versions(
+            self.dockerator.major_python_version
+        ).items():
+            result[k] = f"{v}"
+        return {"python": result}
+
 
 def version_is_compatible(dep_def, version):
     if version == "":  # not previously installed, I guess
