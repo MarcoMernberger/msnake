@@ -76,14 +76,14 @@ blacklist_per_version = {
         "bgx",  # won't compile?
         "MSGFplus",  # apperantly can't evaluate java version - possibly fixable
         "rTANDEM",  # invalid c++
-        'pathifier', # incompatible princurve version
-        'ClusterSignificance',# incompatible princurve version
-        'ggtree', # incompatible ggplot version
-        'ggcyto', # incompatible ggplot version
+        "pathifier",  # incompatible princurve version
+        "ClusterSignificance",  # incompatible princurve version
+        "ggtree",  # incompatible ggplot version
+        "ggcyto",  # incompatible ggplot version
     },
     "3.8": {
-        "GEOquery",  # geoquery needs redr 1.3.1 which was released two months *after* bioconductor 3.8
-        "ggtree",  # requests tidytree >=0.1.9 but only 0.2.0 released a month later exports the necessary function
+        # "GEOquery",  # geoquery needs redr 1.3.1 which was released two months *after* bioconductor 3.8 - manual overwrite
+        # "ggtree",  # requests tidytree >=0.1.9 but only 0.2.0 released a month later exports the necessary function - manual overwrite
         "rTANDEM",  # invalid c++
         "bgx",  # won't compile?
         "MSGFplus",  # apperantly can't evaluate java version - possibly fixable
@@ -97,6 +97,17 @@ manual_dependencies = {  # because the cran annotation sometimes simply is wrong
     "ForecastComb": ["foreign"],
     "latticeDensity": ["lattice"],
     "cudaBayes": ["Rcpp"],
+}
+
+manual_overwrite = {
+    "3.8": {
+        "cran": {
+            "readr": "https://mran.microsoft.com/snapshot/2018-12-23/src/contrib/readr_1.3.1.tar.gz",
+            # GEOQuery needs a readr that was realeased 2 months after the bioconductor release?!
+            "tidytree": "https://cran.microsoft.com/snapshot/2018-12-01/src/contrib/tidytree_0.2.0.tar.gz",
+            # requests tidytree >=0.1.9 but only 0.2.0 released a month later exports the necessary function - manual overwrite}
+        }
+    }
 }
 
 
@@ -137,18 +148,16 @@ build_in = {
 def install_bioconductor():
     bc_version = os.environ["BIOCONDUCTOR_VERSION"]
     cran_mode = os.environ["CRAN_MODE"]
-    cran_packages = load_packages("cran", os.environ["URL_CRAN"]).get()
-    bioc_software_packages = load_packages("software", os.environ["URL_SOFTWARE"]).get()
-    bioc_annotation_packages = load_packages(
-        "annotation", os.environ["URL_ANNOTATION"]
-    ).get()
-    bioc_data_packages = load_packages("experiment", os.environ["URL_EXPERIMENT"]).get()
-    pkgs = [
-        cran_packages,
-        bioc_software_packages,
-        bioc_annotation_packages,
-        bioc_data_packages,
-    ]
+    sources = ["cran", "software", "annotation", "experiment"]
+    sources = {
+        x: load_packages(x, os.environ["URL_%s" % x.upper()]).get() for x in sources
+    }
+    if bc_version in manual_overwrite:
+        for src_name, src in manual_overwrite[bc_version].items():
+            for pkg_name, url in src.items():
+                sources[src_name][pkg_name]["url"] = url
+
+    pkgs = list(sources.values())
 
     whitelist = os.environ["BIOCONDUCTOR_WHITELIST"].split(":")
 
@@ -167,15 +176,15 @@ def install_bioconductor():
     # which we now need to filter down
 
     to_prune = set()
-    to_prune.update(bioc_annotation_packages.keys())
-    to_prune.update(bioc_data_packages.keys())
+    to_prune.update(sources["annotation"].keys())
+    to_prune.update(sources["experiment"].keys())
     to_prune.update(prune_because_of_missing_preqs)
     prune(jobs, to_prune)
 
     if cran_mode == "minimal":
-        prune(jobs, cran_packages)
+        prune(jobs, sources["cran"])
         already_unpruned = set()
-        for k in bioc_software_packages:
+        for k in sources["software"]:
             for j in jobs[k]:
                 unprune(j, already_unpruned)
         prune(jobs, to_prune)
@@ -186,7 +195,7 @@ def install_bioconductor():
             for j in jobs[k]:
                 unprune(j, already_unpruned)
     if "_full_" in whitelist:
-        for k in bioc_software_packages:
+        for k in sources["software"]:
             for j in jobs[k]:
                 unprune(j, already_unpruned)
 
@@ -200,6 +209,9 @@ def install_bioconductor():
 
     ppg.util.global_pipegraph.connect_graph()
     ppg.run_pipegraph()
+    for j in ppg.util.job_uniquifier.values():
+        if j._pruned:
+            print("pruned", j.job_id, "because of", j._pruned)
     write_done_sentinel(cran_mode, whitelist)
 
 
