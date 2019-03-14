@@ -237,6 +237,8 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 )
             else:
                 print("bioconductor install done")
+            return True
+        return False
 
 
 def download_file(url, filename):

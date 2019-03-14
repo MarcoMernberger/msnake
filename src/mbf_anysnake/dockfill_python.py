@@ -53,7 +53,7 @@ class DockFill_Python:
             raise ValueError("Find a fix for old ssl lib")
             # ssl_lib = "libssl1.0-dev"
 
-        self.dockerator.build(
+        return self.dockerator.build(
             target_dir=self.paths["storage_python"],
             target_dir_inside_docker=self.paths["docker_storage_python"],
             relative_check_filename="bin/virtualenv",
@@ -106,8 +106,9 @@ class _DockerFillVenv:
         )
 
     def ensure(self):
-        self.create_venv()
-        self.fill_venv()
+        res = self.create_venv()
+        res |= self.fill_venv()
+        return res
 
     def fill_venv(self, rebuild=False):
         code_packages = {
@@ -143,6 +144,8 @@ class _DockerFillVenv:
             }
         if to_install:
             self.install_pip_packages(to_install, had_to_clone)
+            return True
+        return False
 
     def safe_name(self, name):
         return pkg_resources.safe_name(name).lower()
@@ -289,7 +292,7 @@ class DockFill_GlobalVenv(_DockerFillVenv):
             print(f"    {entry}")
 
     def create_venv(self):
-        self.dockerator.build(
+        return self.dockerator.build(
             target_dir=self.target_path,
             target_dir_inside_docker=self.target_path_inside_docker,
             relative_check_filename=Path("bin") / "activate.fish",
@@ -334,6 +337,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
     def ensure(self):
         super().ensure()
         self.copy_bins_from_global()
+        return False
 
     def copy_bins_from_global(self):
         source_dir = self.paths["storage_venv"] / "bin"
@@ -422,10 +426,14 @@ cp /opt/sitecustomize.py {sc_file}
 echo "done"
 """,
         )
+        return False
 
     def rebuild(self, packages):
         self.fill_venv(rebuild=True)
 
+    def fill_venv(self, rebuild=False):
+        super().fill_venv(rebuild=rebuild)
+        return False
 
 def version_is_compatible(dep_def, version):
     if version == "":  # not previously installed, I guess

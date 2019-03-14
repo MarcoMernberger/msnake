@@ -84,7 +84,12 @@ Configuration for the run command
   volumes, read only
 - additional_volumes_rw = [["/outside_docker", "/inside_docker"]]: map additional docker
   volumes, read write
-- post_run = "cmd.sh": run this after executing any run command
+- post_run = "cmd.sh": run this after executing any run command - cwd is project dir
+
+[build]
+- post_storage_build = "cmd.sh": run this if a storage build was run  - cwd is
+  storge_path
+
 
 [global_python]
 ---------------

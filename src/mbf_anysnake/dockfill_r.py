@@ -49,7 +49,7 @@ class DockFill_R:
             + self.dockerator.R_version
             + ".tar.gz"
         )
-        self.dockerator.build(
+        return self.dockerator.build(
             target_dir=self.paths["storage_r"],
             target_dir_inside_docker=self.paths["docker_storage_r"],
             relative_check_filename="bin/R",
@@ -99,7 +99,7 @@ class DockFill_Rpy2:
     def ensure(self):
         # TODO: This will probably need fine tuning for combining older Rs and the
         # latest rpy2 version that supported them
-        self.dockerator.build(
+        return self.dockerator.build(
             target_dir=self.paths["storage_rpy2"],
             target_dir_inside_docker=self.paths["docker_storage_rpy2"],
             relative_check_filename=f"lib/python{self.dockerator.major_python_version}/site-packages/rpy2/__init__.py",

@@ -106,6 +106,12 @@ def run(cmd, no_build=False):
         volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
     )
+    post_run = config.get("run", {}).get("post_run", False)
+    if post_run:
+        import subprocess
+
+        p = subprocess.Popen(post_run)
+        p.communicate()
 
 
 @main.command()
@@ -184,13 +190,15 @@ INSIDE_ANYSNAKE="yes"
 
 
 """
-)
-        
+        )
+
         print("Written default anysnake.toml")
+
 
 @main.command()
 def version():
     import mbf_anysnake
+
     print("mbf_anysnake version %s" % mbf_anysnake.__version__)
 
 

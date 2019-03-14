@@ -46,6 +46,7 @@ class DockFill_Docker:
             else:
                 print(bs, "not found")
                 client.images.pull(self.dockerator.docker_image)
+        return False
 
     def pprint(self):
         print(f"  docker_image = {self.dockerator.docker_image}")
