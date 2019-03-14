@@ -153,6 +153,13 @@ def show_config():
     d.pprint()
     print("Config files used:", parsed["used_files"])
 
+@main.command()
+def show_paths():
+    """Print the config as it is actually used"""
+    d, parsed = get_dockerator()
+    import pprint
+    print("paths detected")
+    pprint.pprint(d.paths)
 
 @main.command()
 def default_config():

@@ -5,6 +5,7 @@ import time
 import shutil
 from pathlib import Path
 import re
+from .util import find_storage_path_from_other_machine
 
 
 class DockFill_Bioconductor:
@@ -19,13 +20,11 @@ class DockFill_Bioconductor:
         self.done_string = (
             "done:" + self.cran_mode + ":" + ":".join(self.bioconductor_whitelist)
         )
-        postfix = Path("bioconductor") / self.bioconductor_version
-        bc_path = self.paths["storage"] / postfix
-        if not self.is_done(bc_path) and self.dockerater.storage_per_hostname:
-            for d in dockerator.paths["storage"].parent.glob("*"):
-                if d.is_dir() and self.is_done(d / postfix):
-                    bc_path = d / postfix
-                    break
+        bc_path = find_storage_path_from_other_machine(
+            self.dockerator,
+            Path("bioconductor") / self.bioconductor_version,
+            self.is_done,
+        )
         self.paths.update(
             {
                 "storage_bioconductor": bc_path,
@@ -258,7 +257,7 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
             "base": {
                 "bioconductor_version": self.bioconductor_version,
                 "bioconductor_whitelist": self.bioconductor_whitelist,
-                'cran': self.cran_mode,
+                "cran": self.cran_mode,
             }
         }
 

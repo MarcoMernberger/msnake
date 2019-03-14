@@ -294,6 +294,7 @@ class Dockerator:
             docker_image, "/bin/bash /dockertor/run.sh", **run_kwargs
         )
         try:
+            return_code = -1
             container.start()
             return_code = container.wait()
         except KeyboardInterrupt:
