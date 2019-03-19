@@ -110,7 +110,7 @@ def run(cmd, no_build=False):
     post_run = config.get('run', {}).get('post_run', False)
     if post_run:
         import subprocess
-        p = subprocess.Popen(post_run)
+        p = subprocess.Popen(post_run, shell=True)
         p.communicate()
 
 

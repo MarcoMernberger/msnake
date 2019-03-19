@@ -58,7 +58,9 @@ class Dockerator:
         self.storage_path = Path(storage_path)
         self.storage_per_hostname = storage_per_hostname
 
-        storage_path = (storage_path / docker_image[:docker_image.rfind(':')]).absolute()
+        storage_path = (
+            storage_path / docker_image[: docker_image.rfind(":")]
+        ).absolute()
         code_path = Path(code_path).absolute()
         self.storage_per_hostname = bool(storage_per_hostname)
 
@@ -145,7 +147,9 @@ class Dockerator:
         if run_post_build and self.post_build_cmd:
             import subprocess
 
-            p = subprocess.Popen(str(Path(str(self.post_build_cmd)).absolute()), cwd=str(self.paths["storage"]))
+            p = subprocess.Popen(
+                str(self.post_build_cmd), cwd=str(self.paths["storage"], shell=True)
+            )
             p.communicate()
 
     def ensure_just_docker(self):
