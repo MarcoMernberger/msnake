@@ -325,7 +325,7 @@ RUN usermod -g sudo u1001
 RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
-RUN apt-get install sudo unzip
+RUN apt-get install sudo unzip liblzo2-dev
 ENV RUSTUP_HOME=/opt/rust
 ENV CARGO_HOME=/opt/rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
