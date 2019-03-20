@@ -338,7 +338,7 @@ class Dockerator:
             print("Building", log_name[4:])
             build_dir = target_dir.with_name(target_dir.name + "_temp")
             if build_dir.exists():
-                shutil.rmtree(build_dir)
+                shutil.rmtree(str(build_dir))
             build_dir.mkdir(parents=True)
             volumes = {build_dir: target_dir_inside_docker}
             if additional_volumes:

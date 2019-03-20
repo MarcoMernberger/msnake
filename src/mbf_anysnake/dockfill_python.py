@@ -10,6 +10,7 @@ from pathlib import Path
 from .util import combine_volumes, find_storage_path_from_other_machine
 
 
+
 class DockFill_Python:
     def __init__(self, dockerator):
         self.dockerator = dockerator
@@ -96,6 +97,38 @@ echo "done"
 re_github = r"[A-Za-z0-9-]+\/[A-Za-z0-9]+"
 
 
+def safe_name(name):
+    return pkg_resources.safe_name(name).lower()
+
+
+class MiniNode:
+    def __init__(self, name):
+        self.name = safe_name(name)
+        self.unsafe_name = name
+        self.prerequisites = set()
+        self.dependants = set()
+
+    def depends_on(self, other_node):
+        self.prerequisites.add(other_node)
+        other_node.dependants.add(self)
+
+
+def apply_topological_order(nodes):
+    for n in nodes:
+        n.dependants_copy = n.dependants.copy()
+    L = []
+    S = [job for job in nodes if len(job.dependants_copy) == 0]
+    S.sort(key=lambda job: job.prio if hasattr(job, "prio") else 0)
+    while S:
+        n = S.pop()
+        L.append(n)
+        for m in n.prerequisites:
+            m.dependants_copy.remove(n)
+            if not m.dependants_copy:
+                S.append(m)
+    return L
+
+
 class _DockerFillVenv:
     def __init__(self):
         self.paths.update(
@@ -133,7 +166,7 @@ class _DockerFillVenv:
                 self.dockerator.major_python_version
             )
             for c in code_names:
-                if self.safe_name(c) not in installed_versions:
+                if safe_name(c) not in installed_versions:
                     had_to_clone.add(c)
             to_install = {
                 k: v
@@ -141,31 +174,43 @@ class _DockerFillVenv:
                 if (
                     k not in code_names
                     and not version_is_compatible(
-                        v, installed_versions.get(self.safe_name(k), "")
+                        v, installed_versions.get(safe_name(k), "")
                     )
                 )
                 or (k in code_names and k in had_to_clone)
             }
         extra_reqs = []
+        had_to_clone_nodes = {safe_name(c): MiniNode(c) for c in had_to_clone}
         for c in had_to_clone:
             cfg_file = Path(self.paths["code"] / c / "setup.cfg")
             if cfg_file.exists():
                 import configparser
 
                 parser = configparser.ConfigParser()
-                cfg = parser.read(cfg_file)
+                cfg = parser.read(str(cfg_file))
                 try:
                     parser["options.extras_require"]["testing"]
                     extra_reqs.append((c, "testing"))
                 except KeyError:
                     pass
+                try:
+                    needs = parser["options"]["install_requires"]
+                    needs = re.split("\n|;", needs)
+                    needs = [safe_name(x.strip()) for x in needs if x.strip()]
+                    needs = set(needs).intersection(had_to_clone_nodes)
+                    print(c, needs)
+                    for dep in needs:
+                        had_to_clone_nodes[safe_name(c)].depends_on(
+                            had_to_clone_nodes[safe_name(dep)]
+                        )
+                except KeyError:
+                    pass
+        had_to_clone_nodes = apply_topological_order(had_to_clone_nodes.values())
+        had_to_clone = [node.unsafe_name for node in had_to_clone_nodes[::-1]]
         if to_install:
             self.install_pip_packages(to_install, had_to_clone, extra_reqs)
             return True
         return False
-
-    def safe_name(self, name):
-        return pkg_resources.safe_name(name).lower()
 
     def clone_code_packages(self, code_packages):
         result = set()
@@ -224,21 +269,25 @@ class _DockerFillVenv:
             if p.name.endswith(".dist-info"):
                 name = p.name[: p.name.rfind("-", 0, -5)]
                 version = p.name[p.name.rfind("-", 0, -5) + 1 : -1 * len(".dist-info")]
-                result[self.safe_name(name)] = version
+                result[safe_name(name)] = version
             elif p.name.endswith(".egg-link"):
                 name = p.name[: -1 * len(".egg-link")]
                 version = "unknown"
-                result[self.safe_name(name)] = version
+                result[safe_name(name)] = version
         return result
 
     def install_pip_packages(self, packages, code_packages, extra_reqs):
         """packages are parse_requirements results with method == 'pip'"""
         pkg_string = []
         for k, v in packages.items():
-            if k in code_packages:
-                pkg_string.append(f'-e "/project/code/{k}"')
+            if (
+                k in code_packages or safe_name(k) in code_packages
+            ):  # these late in correct order
+                pass
             else:
                 pkg_string.append('"%s%s"' % (k, v))
+        for k in code_packages:
+            pkg_string.append(f'-e "/project/code/{k}"')
         for k, extra in extra_reqs:
             pkg_string.append(f"-e /project/code/{k}[{extra}]")
 
@@ -247,6 +296,7 @@ class _DockerFillVenv:
         return_code, logs = self.dockerator._run_docker(
             f"""
 #!/bin/bash
+    echo pip install {pkg_string}
     {self.target_path_inside_docker}/bin/pip install {pkg_string}
     """,
             {
@@ -265,12 +315,14 @@ class _DockerFillVenv:
         installed_now = self.find_installed_packages(
             self.dockerator.major_python_version
         )
-        still_missing = set([self.safe_name(k) for k in packages.keys()]).difference(
-            [self.safe_name(k) for k in installed_now]
+        still_missing = set([safe_name(k) for k in packages.keys()]).difference(
+            [safe_name(k) for k in installed_now]
         )
         if still_missing:
             msg = f"Installation of packages failed: {still_missing}\n"
-        elif return_code["StatusCode"] != 0:
+        elif (isinstance(return_code, int) and (return_code != 0)) or (
+            not isinstance(return_code, int) and (return_code["StatusCode"] != 0)
+        ):
             msg = f"Installation of packages failed: return code was not 0 (was {return_code})\n"
         else:
             msg = ""
