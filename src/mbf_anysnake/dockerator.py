@@ -15,6 +15,7 @@ from .dockfill_docker import DockFill_Docker
 from .dockfill_python import DockFill_Python, DockFill_GlobalVenv, DockFill_CodeVenv
 from .dockfill_r import DockFill_R, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
+from .dockfill_rust import DockFill_Rust
 from .util import combine_volumes
 
 
@@ -49,6 +50,8 @@ class Dockerator:
         cran_mirror="https://cloud.r-project.org",
         environment_variables={},
         post_build_cmd=False,
+        rust_versions=[],
+        cargo_install=[],
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -84,11 +87,14 @@ class Dockerator:
         self.bioconductor_whitelist = bioconductor_whitelist
         self.cran_mode = cran_mode
         self.post_build_cmd = post_build_cmd
+        self.rust_versions = rust_versions
+        self.cargo_install = cargo_install
 
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
         self.strategies = [
             dfd,
+            DockFill_Rust(self, self.rust_versions, self.cargo_install),
             dfp,
             DockFill_CodeVenv(
                 self, dfp, dfgv
@@ -116,7 +122,10 @@ class Dockerator:
 
         for k, v in self.paths.items():
             self.paths[k] = Path(v)
-        self.environment_variables = environment_variables
+        self.environment_variables = dict(environment_variables)
+        for df in self.strategies:
+            if hasattr(df, "env"):
+                self.environment_variables.update(df.env)
 
     def pprint(self):
         print("Dockerator")
@@ -201,7 +210,7 @@ class Dockerator:
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
-        ro_volumes = [{tf.name: "/dockertor/run.sh"}]
+        ro_volumes = [{tf.name: "/dockerator/run.sh"}]
         rw_volumes = [{os.path.abspath("."): "/project"}]
         for h in home_files:
             p = Path("~").expanduser() / h
@@ -248,7 +257,7 @@ class Dockerator:
 
         cmd.extend(["-w", "/project"])
         cmd.append("--network=host")
-        cmd.extend([self.docker_image, "/bin/bash", "/dockertor/run.sh"])
+        cmd.extend([self.docker_image, "/bin/bash", "/dockerator/run.sh"])
         last_was_dash = True
         for x in cmd:
             if x.startswith("-") and not x.startswith("--"):
@@ -279,7 +288,7 @@ class Dockerator:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {tf.name: "/dockertor/run.sh"}
+        volumes = {tf.name: "/dockerator/run.sh"}
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
@@ -295,7 +304,7 @@ class Dockerator:
         tf.write(bash_script)
         tf.flush()
         container = client.containers.create(
-            docker_image, "/bin/bash /dockertor/run.sh", **run_kwargs
+            docker_image, "/bin/bash /dockerator/run.sh", **run_kwargs
         )
         try:
             return_code = -1

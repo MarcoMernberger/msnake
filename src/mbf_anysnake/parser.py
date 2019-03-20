@@ -81,9 +81,9 @@ def parsed_to_dockerator(parsed):
         storage_path = Path("version_store")
     storage_per_hostname = bool(base.get("storage_per_hostname", False))
 
-    post_build_cmd = parsed.get('build', {}).get('post_storage_build', False)
+    post_build_cmd = parsed.get("build", {}).get("post_storage_build", False)
     if not isinstance(post_build_cmd, str) and not post_build_cmd is False:
-        raise ValueError('post_storage_build must be a string')
+        raise ValueError("post_storage_build must be a string")
 
     if "code_path" in base:
         code_path = Path(base["code_path"])
@@ -107,6 +107,11 @@ def parsed_to_dockerator(parsed):
 
     environment_variables = parsed.get("env", {})
 
+    rust_versions = parsed.get("base", {}).get("rust", [])
+    if bioconductor_version and not "1.30.0" in rust_versions:  # TODO: refactor
+        rust_versions.append("1.30.0")
+    cargo_install = parsed.get("cargo_install")
+
     return Dockerator(
         docker_image,
         python_version,
@@ -121,6 +126,8 @@ def parsed_to_dockerator(parsed):
         code_path,
         environment_variables=environment_variables,
         post_build_cmd=post_build_cmd,
+        rust_versions=rust_versions,
+        cargo_install=cargo_install,
     )
 
 

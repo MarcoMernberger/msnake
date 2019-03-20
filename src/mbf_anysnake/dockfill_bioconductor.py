@@ -1,11 +1,9 @@
 # *- coding: future_fstrings -*-
 
 import requests
-import time
-import shutil
 from pathlib import Path
 import re
-from .util import find_storage_path_from_other_machine
+from .util import find_storage_path_from_other_machine, download_file
 
 
 class DockFill_Bioconductor:
@@ -214,12 +212,14 @@ class DockFill_Bioconductor:
 {self.paths['docker_storage_python']}/bin/virtualenv /tmp/venv
 source /tmp/venv/bin/activate
 pip install pypipegraph requests future-fstrings packaging numpy
+export PATH=$PATH:/dockerator/cargo/bin/cargo
 python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconductor.py
 """
             env = {"URL_%s" % k.upper(): v for (k, v) in urls.items()}
             env["BIOCONDUCTOR_VERSION"] = self.bioconductor_version
             env["BIOCONDUCTOR_WHITELIST"] = ":".join(self.bioconductor_whitelist)
             env["CRAN_MODE"] = self.cran_mode
+            env["RUSTUP_TOOLCHAIN"] = "1.30.0" # Todo: combine with the one in parser.py
             volumes = {
                 self.paths["storage_python"]: self.paths["docker_storage_python"],
                 self.paths["storage_venv"]: self.paths["docker_storage_venv"],
@@ -235,6 +235,8 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 self.paths["storage_bioconductor"]: self.paths[
                     "docker_storage_bioconductor"
                 ],
+                self.paths["storage_rustup"]: self.paths["docker_storage_rustup"],
+                self.paths["storage_cargo"]: self.paths["docker_storage_cargo"],
             }
             print("calling bioconductor install docker")
             self.dockerator._run_docker(
@@ -261,20 +263,3 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
             }
         }
 
-
-def download_file(url, filename):
-    """Download a file with requests if the target does not exist yet"""
-    if not Path(filename).exists():
-        print("downloading", url, filename)
-        r = requests.get(url, stream=True)
-        if r.status_code != 200:
-            raise ValueError(f"Error return on {url} {r.status_code}")
-        start = time.time()
-        count = 0
-        with open(str(filename) + "_temp", "wb") as op:
-            for block in r.iter_content(1024 * 1024):
-                op.write(block)
-                count += len(block)
-        shutil.move(str(filename) + "_temp", str(filename))
-        stop = time.time()
-        print("Rate: %.2f MB/s" % ((count / 1024 / 1024 / (stop - start))))

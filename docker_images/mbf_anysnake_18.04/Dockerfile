@@ -326,13 +326,3 @@ RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
 RUN apt-get install sudo unzip
-ENV RUSTUP_HOME=/opt/rust
-ENV CARGO_HOME=/opt/rust
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-RUN  /opt/rust/bin/rustup install nightly
-COPY ln_cargo.py /opt/ln_cargo2.py
-RUN /opt/ln_cargo2.py
-RUN chmod ugo+w /opt/rust/ -R
-
-
-

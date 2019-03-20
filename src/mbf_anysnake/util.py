@@ -1,3 +1,7 @@
+import requests
+import time
+import shutil
+import time
 from pathlib import Path
 
 
@@ -35,3 +39,21 @@ def find_storage_path_from_other_machine(dockerator, postfix, check_func=None):
                         result = d / postfix
                         break
     return result
+
+
+def download_file(url, filename):
+    """Download a file with requests if the target does not exist yet"""
+    if not Path(filename).exists():
+        print("downloading", url, filename)
+        r = requests.get(url, stream=True)
+        if r.status_code != 200:
+            raise ValueError(f"Error return on {url} {r.status_code}")
+        start = time.time()
+        count = 0
+        with open(str(filename) + "_temp", "wb") as op:
+            for block in r.iter_content(1024 * 1024):
+                op.write(block)
+                count += len(block)
+        shutil.move(str(filename) + "_temp", str(filename))
+        stop = time.time()
+        print("Rate: %.2f MB/s" % ((count / 1024 / 1024 / (stop - start))))
