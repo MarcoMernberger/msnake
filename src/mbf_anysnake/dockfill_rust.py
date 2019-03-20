@@ -20,9 +20,11 @@ class DockFill_Rust:
         self.paths = self.dockerator.paths
         self.paths.update(
             {
-                "storage_rustup": find_storage_path_from_other_machine(
-                    self.dockerator, Path("rustup_home")
-                ),
+                # this does not use the find_storage_path_from_other_machine
+                # because rustup will place the binaries in the cargo/bin path
+                # but the cargo stuff needs to be per machine because 
+                # the downloads happen there.
+                "storage_rustup": self.paths['storage'] / 'rustup_home', 
                 "docker_storage_rustup": Path("/dockerator/rustup_home"),
                 "storage_cargo": self.paths["storage"] / "rust_cargo",
                 "docker_storage_cargo": Path("/dockerator/cargo"),
@@ -41,6 +43,9 @@ class DockFill_Rust:
             "RUSTUP_TOOLCHAIN": self.rust_versions[0],
         }
         self.shell_path = str(self.paths["docker_storage_cargo"] / "bin")
+
+    def pprint(self):
+        print(f"  Rust versions={self.rust_versions}")
 
     def ensure(self):
         self.paths["storage_rustup"].mkdir(exist_ok=True)

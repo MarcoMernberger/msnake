@@ -95,6 +95,14 @@ Configuration for the run command
   volumes, read write
 - post_run = "cmd.sh": run this after executing any run command - cwd is project dir
 
+[global_run]
+Additional volume configuration that get's merged with [run][additional_volumes_r*]
+
+- additional_volumes_ro = [["/outside_docker", "/inside_docker"]]: map additional docker
+  volumes, read only
+- additional_volumes_rw = [["/outside_docker", "/inside_docker"]]: map additional docker
+  volumes, read write
+
 [build]
 - post_storage_build = "cmd.sh": run this if a storage build was run  - cwd is
   storge_path
