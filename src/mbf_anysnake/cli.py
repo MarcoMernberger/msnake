@@ -174,21 +174,30 @@ def default_config():
 #global_config="/etc/anysnake.tompl"
 # python version to use
 python="3.7.2"
+
 #bioconductor version to use, R version and CRAN dates are derived from this
+# (optional) 
 bioconductor="3.8"
+
 # cran options are 'minimal' (just what's needed from bioconductor) and 'full'
 # (everything)
 cran="full"
+
 # where to store the installations
 # python, R, global virtual enviromnments, bioconductor, cran
 storage_path="/var/lib/anysnake"
+
 # local venv, editable libraries
 code_path="code"
+
 # install all bioconductor packages whether they need experimental or annotation
 # data or not.
 # bioconductor_whitelist=["_full_"]
 # or install selected packages otherwise omited like this
 # bioconductor_whitelist=["chimera"]
+
+# include rust (if you use bioconductor, rust 1.30.0 will be added automatically)
+# rust = ["1.30.0", "nigthly-2019-03-20"]
 
 [run]
 additional_volumes_ro = [['/opt', '/opt']]

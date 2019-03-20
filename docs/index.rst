@@ -3,7 +3,7 @@ mbf_anysnake
 ==============
 
 Welcome to **mbf_anysnake**, which 
-abstracts ubuntu, python, R and bioconductor versions.
+abstracts ubuntu, python, rust, R and bioconductor versions.
 
 It's source lives at `github <https://github.com/TyberiusPrime/mbf_anysnake>`_.
 
@@ -80,6 +80,10 @@ Basic configuration.
 - global_config="/path/to/filename.toml": import lobal configuration. Local config
   directives overwrite global ones. Useful to share e.g. the storage_path and global 
   python packages between projects
+- rust_versions = ["1.30.0", "nightly-2019-03-19"]: install these rust versions with
+  rustup. The first one will be the 'default toolchain'. Note that the stable/nightly
+  'channels' are not supported - they would be supposed to 'auto update' and anysnake only reruns the
+  installation if the rust_versions definition changes.
 
 [run]
 ------
