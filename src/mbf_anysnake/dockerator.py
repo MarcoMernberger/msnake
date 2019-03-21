@@ -156,8 +156,9 @@ class Dockerator:
         if run_post_build and self.post_build_cmd:
             import subprocess
 
+            print("running", self.post_build_cmd)
             p = subprocess.Popen(
-                str(self.post_build_cmd), cwd=str(self.paths["storage"], shell=True)
+                str(self.post_build_cmd), cwd=str(self.paths["storage"]), shell=True
             )
             p.communicate()
 
@@ -224,9 +225,9 @@ class Dockerator:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:
             ro_volumes.extend([df.volumes for df in self.strategies])
-            rw_volumes.extend(
-                [df.rw_volumes for df in self.strategies if hasattr(df, "rw_volumes")]
-            )
+        rw_volumes.extend(
+            [df.rw_volumes for df in self.strategies if hasattr(df, "rw_volumes")]
+        )
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
