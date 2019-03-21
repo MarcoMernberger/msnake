@@ -41,7 +41,7 @@ def get_next_free_port(start_at):
 def get_volumes_config(config, key2):
     """Extract a volumes config from the config if present"""
     result = {}
-    for key1 in ['global_run', 'run']:
+    for key1 in ["global_run", "run"]:
         if key1 in config and key2 in config[key1]:
             for (f, t) in config[key1][key2]:
                 result[Path(f).absolute()] = t
@@ -73,18 +73,23 @@ def rebuild_global_venv():
 
 
 @main.command()
-@click.option("--no-build/--build", default=False)
-@click.option("--allow-writes/--no-allow-writes", default=False)
-def shell(no_build=False, allow_writes=False):
+@click.option("--no-build/--build", default=False, help = "don't perform build if things are missing")
+@click.option("--allow-writes/--no-allow-writes", default=False, help="mount all volumes rw")
+@click.option("--include-perf/--no-include-perf", default=False, help="include perf tool for profiling")
+def shell(no_build=False, allow_writes=False, include_perf=False):
     """Run a shell with everything mapped (build if necessary)"""
+    import os
     d, config = get_dockerator()
     if not no_build:
         d.ensure()
     else:
         d.ensure_just_docker()
+    cmd = "/usr/bin/fish" 
+    if include_perf:
+        cmd = "sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`\n" + cmd
     print(
         d.run(
-            "/usr/bin/fish",
+            cmd,
             allow_writes=allow_writes,
             home_files=home_files,
             volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
@@ -137,8 +142,8 @@ def jupyter(no_build=False):
     d.run(
         "jupyter notebook --ip=0.0.0.0 --no-browser",
         home_files=home_files,
-        volumes_ro=get_volumes_config(config,  "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config,  "additional_volumes_rw"),
+        volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         ports=[(host_port, 8888)],
     )
 
@@ -163,14 +168,10 @@ def show_config():
     print("")
     print("Additional volumes")
     print("  RO")
-    for outside, inside in get_volumes_config(
-        parsed,  "additional_volumes_ro"
-    ).items():
+    for outside, inside in get_volumes_config(parsed, "additional_volumes_ro").items():
         print(f"    {outside} -> {inside}")
     print("  RW")
-    for outside, inside in get_volumes_config(
-        parsed,  "additional_volumes_rw"
-    ).items():
+    for outside, inside in get_volumes_config(parsed, "additional_volumes_rw").items():
         print(f"    {outside} -> {inside}")
     print("")
     print("Config files used:", parsed["used_files"])

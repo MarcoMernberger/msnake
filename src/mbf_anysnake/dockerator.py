@@ -182,6 +182,7 @@ class Dockerator:
         volumes_ro={},
         volumes_rw={},
         allow_writes=False,
+        su = True
     ):
         env = env.copy()
         for (

@@ -326,3 +326,5 @@ RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
 RUN apt-get install sudo unzip liblzo2-dev
+COPY sudoers /etc/sudoers
+RUN chmod 440 /etc/sudoers

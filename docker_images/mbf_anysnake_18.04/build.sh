@@ -3,8 +3,10 @@ import hashlib
 import os
 from pathlib import Path
 
-dockerfile = Path(__file__).parent / 'Dockerfile'
-tag = hashlib.md5(dockerfile.read_bytes()).hexdigest()
+hash = hashlib.md5()
+hash.update((Path(__file__).parent / 'Dockerfile').read_bytes())
+hash.update((Path(__file__).parent / 'sudoers').read_bytes())
+tag = hash.hexdigest()
 
 os.system('docker build -t mbf_anysnake_18.04:%s .' % tag)
 

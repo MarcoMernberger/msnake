@@ -49,7 +49,10 @@ class DockFill_Docker:
         import hashlib
 
         dockerfile = (
-            self.paths["docker_image_build_scripts"] / docker_image_name / "Dockerfile"
+            
         )
-        tag = hashlib.md5(dockerfile.read_bytes()).hexdigest()
+        hash = hashlib.md5()
+        hash.update((self.paths["docker_image_build_scripts"] / docker_image_name / "Dockerfile").read_bytes())
+        hash.update((self.paths["docker_image_build_scripts"] / docker_image_name / "sudoers").read_bytes())
+        tag = hash.hexdigest()
         return tag
