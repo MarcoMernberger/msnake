@@ -1,3 +1,4 @@
+# -*- coding: future_fstrings -*-
 import click
 from pathlib import Path
 from mbf_anysnake import parse_requirements, parsed_to_dockerator
@@ -37,12 +38,13 @@ def get_next_free_port(start_at):
     return port
 
 
-def get_volumes_config(config, key1, key2):
+def get_volumes_config(config, key2):
     """Extract a volumes config from the config if present"""
     result = {}
-    if key1 in config and key2 in config[key1]:
-        for (f, t) in config[key1][key2]:
-            result[Path(f).absolute()] = t
+    for key1 in ['global_run', 'run']:
+        if key1 in config and key2 in config[key1]:
+            for (f, t) in config[key1][key2]:
+                result[Path(f).absolute()] = t
     return result
 
 
@@ -80,13 +82,15 @@ def shell(no_build=False, allow_writes=False):
         d.ensure()
     else:
         d.ensure_just_docker()
-    print(d.run(
-        "/usr/bin/fish",
-        allow_writes=allow_writes,
-        home_files=home_files,
-        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
-    ))
+    print(
+        d.run(
+            "/usr/bin/fish",
+            allow_writes=allow_writes,
+            home_files=home_files,
+            volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
+            volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
+        )
+    )
 
 
 @main.command()
@@ -100,16 +104,19 @@ def run(cmd, no_build=False):
     else:
         d.ensure_just_docker()
 
-    print(d.run(
-        " ".join(cmd),
-        allow_writes=False,
-        home_files=home_files,
-        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
-    ))
-    post_run = config.get('run', {}).get('post_run', False)
+    print(
+        d.run(
+            " ".join(cmd),
+            allow_writes=False,
+            home_files=home_files,
+            volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
+            volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
+        )
+    )
+    post_run = config.get("run", {}).get("post_run", False)
     if post_run:
         import subprocess
+
         p = subprocess.Popen(post_run, shell=True)
         p.communicate()
 
@@ -130,17 +137,19 @@ def jupyter(no_build=False):
     d.run(
         "jupyter notebook --ip=0.0.0.0 --no-browser",
         home_files=home_files,
-        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
+        volumes_ro=get_volumes_config(config,  "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config,  "additional_volumes_rw"),
         ports=[(host_port, 8888)],
     )
 
+
 @main.command()
-@click.argument('modules', nargs=-1)
+@click.argument("modules", nargs=-1)
 @click.option("--report-only/--no-report-only", default=False)
 def test(modules, report_only):
     """Run pytest on all (or a subset) modules that were in the code path and had a tests/conftest.py"""
     from . import testing
+
     d, config = get_dockerator()
     d.ensure()
     testing.run_tests(modules, d, config, report_only)
@@ -151,15 +160,31 @@ def show_config():
     """Print the config as it is actually used"""
     d, parsed = get_dockerator()
     d.pprint()
+    print("")
+    print("Additional volumes")
+    print("  RO")
+    for outside, inside in get_volumes_config(
+        parsed,  "additional_volumes_ro"
+    ).items():
+        print(f"    {outside} -> {inside}")
+    print("  RW")
+    for outside, inside in get_volumes_config(
+        parsed,  "additional_volumes_rw"
+    ).items():
+        print(f"    {outside} -> {inside}")
+    print("")
     print("Config files used:", parsed["used_files"])
+
 
 @main.command()
 def show_paths():
     """Print the config as it is actually used"""
     d, parsed = get_dockerator()
     import pprint
+
     print("paths detected")
     pprint.pprint(d.paths)
+
 
 @main.command()
 def default_config():
@@ -216,33 +241,37 @@ INSIDE_ANYSNAKE="yes"
 
 
 """
-)
-        
+        )
+
         print("Written default anysnake.toml")
+
 
 def merge_dicts(a, b, path=None):
     "merges b into a"
-    if path is None: path = []
+    if path is None:
+        path = []
     for key in b:
         if key in a:
             if isinstance(a[key], dict) and isinstance(b[key], dict):
                 merge_dicts(a[key], b[key], path + [str(key)])
             elif a[key] == b[key]:
-                pass # same leaf value
+                pass  # same leaf value
             else:
-                raise Exception('Conflict at %s' % '.'.join(path + [str(key)]))
+                raise Exception("Conflict at %s" % ".".join(path + [str(key)]))
         else:
             a[key] = b[key]
     return a
+
 
 @main.command()
 def freeze():
     """Output installed packages in anysnake.toml format"""
     import tomlkit
+
     d, parsed = get_dockerator()
     output = {}
     for s in d.strategies:
-        if hasattr(s, 'freeze'):
+        if hasattr(s, "freeze"):
             merge_dicts(output, s.freeze())
     print(tomlkit.dumps(output))
 
@@ -250,6 +279,7 @@ def freeze():
 @main.command()
 def version():
     import mbf_anysnake
+
     print("mbf_anysnake version %s" % mbf_anysnake.__version__)
 
 
