@@ -121,7 +121,12 @@ optionally with version specification just like pip/requirements.txt.
 Example ``jupyter=""`` or ``pandas=">=0.23"``.
 
 For an editable libray: ``dppd="@git+https://github.com/TyberiusPrime/dppd"``
-(use "@hg+" for mercurial).
+(use "@hg+" for mercurial, use @gh/user/repo for github).
+
+[pip_regexps]
+Regeps->substitution to apply to pip-versions. This allows you to to extend 
+beyond the @gh (see 'python' above) automatic.
+
 
 [env]
 ------

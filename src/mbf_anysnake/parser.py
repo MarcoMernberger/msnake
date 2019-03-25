@@ -94,10 +94,12 @@ def parsed_to_dockerator(parsed):
     # Todo: make configurable
     Path("logs").mkdir(parents=False, exist_ok=True)
 
+    additional_pip_lookup_res = list((parsed.get('pip_regexps', {})).items())
+    additional_pip_lookup_res.append(("^@gh/([^/]+)/(.+)", r"@git+https://github.com/\1/\2"))
     global_pip_packages = parsed.get("global_python", {})
     local_pip_packages = parsed.get("python", {})
-    check_pip_definitions(global_pip_packages)
-    check_pip_definitions(local_pip_packages)
+    check_pip_definitions(global_pip_packages, additional_pip_lookup_res)
+    check_pip_definitions(local_pip_packages, additional_pip_lookup_res)
     bioconductor_whitelist = base.get("bioconductor_whitelist", [])
     if not isinstance(bioconductor_whitelist, list):
         raise ValueError("bioconductor_whitelist must be a list")
@@ -131,7 +133,12 @@ def parsed_to_dockerator(parsed):
     )
 
 
-def check_pip_definitions(defs):
+def check_pip_definitions(defs, pip_lookup_regexps):
+    for k, v in defs.items():
+        for rex, replacement in pip_lookup_regexps:
+            if re.match(rex,v):
+                defs[k] = re.sub(rex, replacement, v)
+
     for k, v in defs.items():
         if not re.match(
             "^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$", k, flags=re.IGNORECASE
@@ -150,3 +157,4 @@ def check_pip_definitions(defs):
                 raise ValueError(
                     f"Invalid version specification - urls must start with @: '{k}' = '{v}' "
                 )
+
