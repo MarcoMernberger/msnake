@@ -10,7 +10,6 @@ from pathlib import Path
 from .util import combine_volumes, find_storage_path_from_other_machine
 
 
-
 class DockFill_Python:
     def __init__(self, dockerator):
         self.dockerator = dockerator
@@ -50,10 +49,13 @@ class DockFill_Python:
             or (python_version >= "2.7.13")
         ):
             # ssl_lib = "libssl-dev"
+            ssl_lib=None
+            ssl_cmd = ""
             pass
         else:
-            raise ValueError("Find a fix for old ssl lib")
-            # ssl_lib = "libssl1.0-dev"
+            #raise ValueError("Find a fix for old ssl lib")
+            ssl_lib = "libssl1.0-dev"
+            ssl_cmd = f"sudo apt-get install -y {ssl_lib}"
 
         return self.dockerator.build(
             target_dir=self.paths["storage_python"],
@@ -69,6 +71,7 @@ cd ~/
 git clone git://github.com/pyenv/pyenv.git
 cd pyenv/plugins/python-build
 ./install.sh
+{ssl_cmd}
 
 export MAKE_OPTS=-j{self.dockerator.cores}
 export CONFIGURE_OPTS=--enable-shared
@@ -274,11 +277,26 @@ class _DockerFillVenv:
                 name = p.name[: -1 * len(".egg-link")]
                 version = "unknown"
                 result[safe_name(name)] = version
+            elif p.name.endswith('.so'):
+                name = p.name[:p.name.find('.')]
+                version = 'unknown'
+                result[safe_name(name)] = version
+
         return result
+
+    def is_pyo3_package(self, code_package_name):
+        target_path = self.clone_path / code_package_name
+        return (
+            not (target_path / "setup.py").exists()
+            and (target_path / "Cargo.toml").exists()
+            and (target_path / "src" / "lib.rs").exists()
+        )
 
     def install_pip_packages(self, packages, code_packages, extra_reqs):
         """packages are parse_requirements results with method == 'pip'"""
         pkg_string = []
+        further_cmds = []
+        further_pkgs = []
         for k, v in packages.items():
             if (
                 k in code_packages or safe_name(k) in code_packages
@@ -286,30 +304,69 @@ class _DockerFillVenv:
                 pass
             else:
                 pkg_string.append('"%s%s"' % (k, v))
+        needs_pyo3_pack = False
         for k in code_packages:
-            pkg_string.append(f'-e "/project/code/{k}"')
+            if self.is_pyo3_package(k):
+                further_cmds.append(
+                    f"cd /project/code/{k} && pyo3-pack develop --release"
+                )
+                needs_pyo3_pack = True
+                further_pkgs.append(k)
+            else:
+                pkg_string.append(f'-e "/project/code/{k}"')
         for k, extra in extra_reqs:
             pkg_string.append(f"-e /project/code/{k}[{extra}]")
 
         pkg_string = " ".join(pkg_string)
-        print(f"\tpip install {pkg_string}")
+        if pkg_string:
+            print(f"\tpip install {pkg_string}")
+            pip_cmd = f"pip install {pkg_string}"
+        else:
+            pip_cmd = "true"
+        if further_cmds:
+            if needs_pyo3_pack:
+                further_cmds.insert(
+                    0, f"pip install pyo3-pack"
+                )
+                further_cmds.insert(
+                    1, f"export VIRTUAL_ENV={self.target_path_inside_docker}"
+                )
+            further_cmds = "&&\\\n".join(further_cmds)
+            print(f"non-pip install {further_pkgs}")
+        else:
+            further_cmds = ""
+        volumes_ro = self.dockfill_python.volumes.copy()
+        volumes_rw = {
+                self.target_path: self.target_path_inside_docker,
+                self.clone_path: self.clone_path_inside_docker,
+            }
+        env = {}
+        paths = [self.target_path_inside_docker + "/bin"]
+        if needs_pyo3_pack:
+            if self.dockerator.dockfill_rust is None:
+                raise ValueError("pyo3 package but no Rust definied")
+            volumes_ro.update(self.dockerator.dockfill_rust.volumes)
+            volumes_rw.update(self.dockerator.dockfill_rust.rw_volumes)
+            paths.append(self.dockerator.dockfill_rust.shell_path)
+            env.update(self.dockerator.dockfill_rust.env)
+        env['EXTPATH'] = ":".join(paths)
+#/dockerator/code_venv/bin /dockerator/cargo/bin /dockerator/code_venv/bin /dockerator/storage_venv/bin /dockerator/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
+
         return_code, logs = self.dockerator._run_docker(
             f"""
 #!/bin/bash
-    echo pip install {pkg_string}
-    {self.target_path_inside_docker}/bin/pip install {pkg_string}
+    export PATH=$PATH:$EXTPATH
+    echo $PATH
+    echo {pip_cmd}
+    if {pip_cmd}; then 
+        echo {further_cmds}
+        {further_cmds}
+    else
+        exit $?;
+    fi
+
     """,
-            {
-                "volumes": combine_volumes(
-                    ro=[self.dockfill_python.volumes],
-                    rw=[
-                        {
-                            self.target_path: self.target_path_inside_docker,
-                            self.clone_path: self.clone_path_inside_docker,
-                        }
-                    ],
-                )
-            },
+            {"volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw), "environment": env},
             f"log_{self.name}_venv_pip",
         )
         installed_now = self.find_installed_packages(

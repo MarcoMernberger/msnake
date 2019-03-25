@@ -92,15 +92,19 @@ class Dockerator:
 
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
-        self.strategies = [
+        if self.rust_versions:
+            self.dockfill_rust = DockFill_Rust(self, self.rust_versions, self.cargo_install)
+        else:
+            self.dockfill_rust = None
+        self.strategies = [x for x in [
             dfd,
-            DockFill_Rust(self, self.rust_versions, self.cargo_install),
+            self.dockfill_rust,
             dfp,
             DockFill_CodeVenv(
                 self, dfp, dfgv
             ),  # since I want them earlier in the path!
             dfgv,
-        ]
+        ] if x is not None]
         dfr = None
         if r_version:
             self.R_version = r_version
