@@ -68,6 +68,42 @@ def rebuild(modules=[]):
 
 
 @main.command()
+@click.argument("packages", nargs=-1, required=True)
+def remove_pip(packages):
+    """Remove pip modules, from anysnake.toml. 
+    If they're installed, remove their installation
+    If they're editable, remove their code/folders as well"""
+    import shutil
+    import tomlkit
+    d, config = get_dockerator()
+    local_config = tomlkit.loads(Path('anysnake.toml').read_text())
+    write_toml=False
+    for p in packages:
+        if p in local_config.get('python'):
+            del local_config['python'][p]
+            write_toml=True
+        path = d.paths['code_clones'] / p
+        if path.exists():
+            if click.confirm(f"really remove {path}?)"):
+                shutil.rmtree(str(path))
+        lib_path = (d.paths['code_venv'] /'lib'  / ("python" + d.major_python_version) / 'site-packages')
+        print(p + "*")
+        for f in lib_path.glob(p + "*"):
+            print(f)
+
+    if write_toml:
+        import time
+        backup_filename = 'anysnake.toml.%s' % time.strftime("%Y-%M-%d-%H-%M")
+        print("writing new anysnake.toml - old one in %s" % backup_filename)
+        shutil.copy('anysnake.toml', backup_filename)
+        with open("anysnake.toml", 'w') as op:
+            op.write(tomlkit.dumps(local_config))
+
+
+
+
+
+@main.command()
 def rebuild_global_venv():
     raise ValueError("todo")
 
