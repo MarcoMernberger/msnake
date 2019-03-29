@@ -1,5 +1,8 @@
 # -*- coding: future_fstrings -*-
 import click
+import click_completion
+click_completion.init()
+
 from pathlib import Path
 from mbf_anysnake import parse_requirements, parsed_to_dockerator
 import subprocess
@@ -319,6 +322,15 @@ def version():
 
     print("mbf_anysnake version %s" % mbf_anysnake.__version__)
 
+@main.command()
+@click.option('-i', '--case-insensitive/--no-case-insensitive', help="Case insensitive completion")
+@click.argument('shell', required=False, type=click_completion.DocumentedChoice(click_completion.core.shells))
+def show_completion(shell, case_insensitive):
+    """Show the click-completion-command completion code
+    ie. what you need to add to your shell configuration.
+    """
+    extra_env = {'_CLICK_COMPLETION_COMMAND_CASE_INSENSITIVE_COMPLETE': 'ON'} if case_insensitive else {}
+    click.echo(click_completion.core.get_code(shell, extra_env=extra_env))
 
 if __name__ == "__main__":
     main()
