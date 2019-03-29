@@ -325,6 +325,6 @@ RUN usermod -g sudo u1001
 RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
-RUN apt-get install sudo unzip liblzo2-dev libclang-dev libclang
+RUN apt-get install -y sudo unzip liblzo2-dev libclang-dev libclang1 clang-6.0
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
