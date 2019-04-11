@@ -342,13 +342,14 @@ class _DockerFillVenv:
             }
         env = {}
         paths = [self.target_path_inside_docker + "/bin"]
-        if needs_pyo3_pack:
-            if self.dockerator.dockfill_rust is None:
-                raise ValueError("pyo3 package but no Rust definied")
+        if self.dockerator.dockfill_rust is not None: # if we have a rust, use it
             volumes_ro.update(self.dockerator.dockfill_rust.volumes)
             volumes_rw.update(self.dockerator.dockfill_rust.rw_volumes)
             paths.append(self.dockerator.dockfill_rust.shell_path)
             env.update(self.dockerator.dockfill_rust.env)
+        if needs_pyo3_pack:
+            if self.dockerator.dockfill_rust is None:
+                raise ValueError("pyo3 package but no Rust definied")
         env['EXTPATH'] = ":".join(paths)
 #/dockerator/code_venv/bin /dockerator/cargo/bin /dockerator/code_venv/bin /dockerator/storage_venv/bin /dockerator/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
 
@@ -477,6 +478,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
     def ensure(self):
         super().ensure()
         self.copy_bins_from_global()
+        self.fill_sitecustomize()
         return False
 
     def copy_bins_from_global(self):
@@ -529,35 +531,8 @@ class DockFill_CodeVenv(_DockerFillVenv):
             print(f"    {entry}")
 
     def create_venv(self):
-        lib_code = (
-            Path(self.paths["docker_code_venv"])
-            / "lib"
-            / ("python" + self.dockerator.major_python_version)
-        )
-        lib_storage = (
-            Path(self.paths["docker_storage_venv"])
-            / "lib"
-            / ("python" + self.dockerator.major_python_version)
-        )
-        sc_file = str(lib_code / "site-packages" / "sitecustomize.py")
-
-        tf = tempfile.NamedTemporaryFile(suffix=".py", mode="w")
-        tf.write(
-            f"""
-import sys
-for x in [
-    '{lib_storage}/site-packages',
-    '{lib_code}/site-packages',
-    '{lib_code}',
-    ]:
-    if x in sys.path:
-        sys.path.remove(x)
-    sys.path.insert(0, x)
-"""
-        )
-        tf.flush()
+       
         additional_volumes = self.dockfill_python.volumes.copy()
-        additional_volumes[tf.name] = "/opt/sitecustomize.py"
 
         self.dockerator.build(
             target_dir=self.target_path,
@@ -568,11 +543,49 @@ for x in [
             build_cmds=f"""
 ls {self.paths['docker_storage_python']}
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
-cp /opt/sitecustomize.py {sc_file}
 echo "done"
 """,
         )
         return False
+
+    def fill_sitecustomize(self):
+        lib_code = (
+            Path(self.paths["docker_code_venv"])
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+        )
+        lib_storage = (
+            Path(self.paths["docker_storage_venv"])
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+        )
+        if 'docker_storage_rpy2' in self.paths:
+            lib_rpy2 = (Path(self.paths["docker_storage_rpy2"])
+            / "lib"
+            / ("python" + self.dockerator.major_python_version)
+                        )
+            rpy2_venv_str = f"'{lib_rpy2}/site-packages',"
+        else:
+            rpy2_venv_str = ''
+        sc_file = str(self.paths['code_venv']  / "lib"
+            / ("python" + self.dockerator.major_python_version) / "site-packages" / "sitecustomize.py")
+
+        tf = open(sc_file, 'w')
+        tf.write(
+            f"""
+import sys
+for x in [
+    {rpy2_venv_str}
+    '{lib_storage}/site-packages',
+    '{lib_code}/site-packages',
+    '{lib_code}',
+    ]:
+    if x in sys.path:
+        sys.path.remove(x)
+    sys.path.insert(0, x)
+"""
+        )
+        tf.flush()
 
     def rebuild(self, packages):
         if packages:
