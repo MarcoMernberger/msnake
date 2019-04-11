@@ -9,7 +9,8 @@ import subprocess
 
 
 config_file = "anysnake.toml"
-home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", ".jupyter"]
+home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", ".jupyter",
+              '.local/share/fish']
 
 
 @click.group()
@@ -125,7 +126,7 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
         d.ensure_just_docker()
     cmd = "/usr/bin/fish" 
     if include_perf:
-        cmd = "sudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`\n" + cmd
+        cmd = "sudo apt-get update;\nsudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`\n" + cmd
     print(
         d.run(
             cmd,
