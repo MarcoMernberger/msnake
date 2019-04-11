@@ -95,6 +95,7 @@ class DockFill_Rpy2:
             }
         )
         self.volumes = {self.paths["storage_rpy2"]: self.paths["docker_storage_rpy2"]}
+        self.env = {'LD_LIBRARY_PATH': "/dockerator/R/lib/R/lib"}
 
     def pprint(self):
         pass
