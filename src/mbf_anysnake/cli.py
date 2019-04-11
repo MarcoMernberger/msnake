@@ -10,7 +10,8 @@ import subprocess
 
 config_file = "anysnake.toml"
 home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", ".jupyter",
-              '.local/share/fish']
+              '.local/share/fish',
+              '.ipython']
 
 
 @click.group()

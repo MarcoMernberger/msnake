@@ -43,7 +43,7 @@ This will
 Features
 ===========
 
-- Leverage pypi nd pip and allow work on selected libraries for python development
+- Leverage pypi and pip and allow work on selected libraries for python development
 - Sane bioconductor and CRAN version managment (date based on bioconductor release date)
 - 'full' install of CRAN and bioconductor 
 
