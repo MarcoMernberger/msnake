@@ -183,6 +183,7 @@ class Dockerator:
         ports={},
         py_spy_support=True,
         home_files={},
+        home_dirs={},
         volumes_ro={},
         volumes_rw={},
         allow_writes=False,
@@ -225,7 +226,13 @@ class Dockerator:
                     rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
                 else:
                     ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
-
+        for h in home_dirs:
+            p = Path("~").expanduser() / h
+            if p.exists() and not p.is_dir():
+                raise ValueError(f"Expected {p} to be a directory")
+            p.mkdir(exist_ok=True, parents=True)
+            rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+        
         if allow_writes:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:

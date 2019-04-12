@@ -86,8 +86,8 @@ def run_single_test(args):
         cmd,
         allow_writes=False,
         home_files=home_files,
-        volumes_ro=get_volumes_config(config, "run", "additional_volumes_ro"),
-        volumes_rw=get_volumes_config(config, "run", "additional_volumes_rw"),
+        volumes_ro=get_volumes_config(config,  "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config,  "additional_volumes_rw"),
     )
 
 

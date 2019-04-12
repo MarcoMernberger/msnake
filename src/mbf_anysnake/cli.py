@@ -9,8 +9,10 @@ import subprocess
 
 
 config_file = "anysnake.toml"
-home_files = [".hgrc", ".git-credentials", ".gitconfig", ".config/fish", ".jupyter",
+home_files = [".hgrc", ".git-credentials", ".gitconfig",]
+home_dirs = [ ".config/fish", ".jupyter",
               '.local/share/fish',
+              '.local/share/jupyter',
               '.ipython']
 
 
@@ -133,6 +135,7 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
             cmd,
             allow_writes=allow_writes,
             home_files=home_files,
+            home_dirs=home_dirs,
             volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
             volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         )
@@ -155,6 +158,7 @@ def run(cmd, no_build=False):
             " ".join(cmd),
             allow_writes=False,
             home_files=home_files,
+            home_dirs=home_dirs,
             volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
             volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         )
@@ -183,6 +187,7 @@ def jupyter(no_build=False):
     d.run(
         "jupyter notebook --ip=0.0.0.0 --no-browser",
         home_files=home_files,
+        home_dirs=home_dirs,
         volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
         volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         ports=[(host_port, 8888)],
