@@ -86,7 +86,7 @@ class DockFill_Rpy2:
                 "storage_rpy2": (
                     find_storage_path_from_other_machine(
                         self.dockerator,
-                        Path("rpy2") / f"{self.python_version}_{self.R_version}",
+                        Path("rpy2") / f"{self.python_version}_{self.R_version}_1",
                     )
                 ),
                 "docker_storage_rpy2": "/dockerator/rpy2",
@@ -116,7 +116,8 @@ class DockFill_Rpy2:
 export R_HOME={self.paths['docker_storage_r']}
 export PATH={self.paths['docker_storage_r']}/bin:$PATH
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_storage_rpy2']}
-cd /root
+mkdir /tmp/rpy2
+cd /tmp/rpy2
 {self.paths['docker_storage_rpy2']}/bin/pip3 download rpy2
 #this might not be enough later on, if rpy2 gains a version that is
 # dependend on something we don't get as a wheel
@@ -125,9 +126,9 @@ tar xf rpy2-*.tar.gz
 rm rpy2-*.tar.gz
 mv rpy2* rpy2
 cd rpy2
-python setup.py install
+{self.paths['docker_storage_rpy2']}/bin/pip install .
 
-{self.paths['docker_storage_rpy2']}/bin/pip install rpy2
+{self.paths['docker_storage_rpy2']}/bin/pip install tzlocal
 touch {self.paths['docker_storage_rpy2']}/done
 chown 1001 {self.paths['docker_storage_rpy2']} -R
 echo "done"

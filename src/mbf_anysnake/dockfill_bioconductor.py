@@ -53,6 +53,7 @@ class DockFill_Bioconductor:
                 "docker_storage_bioconductor_download"
             ],
         }
+        self.env = {"R_LIBS_SITE": "/dockerator/bioconductor"}
 
     def is_done(self, path):
         done_file = path / "done.sentinel"
@@ -219,7 +220,9 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
             env["BIOCONDUCTOR_VERSION"] = self.bioconductor_version
             env["BIOCONDUCTOR_WHITELIST"] = ":".join(self.bioconductor_whitelist)
             env["CRAN_MODE"] = self.cran_mode
-            env["RUSTUP_TOOLCHAIN"] = "1.30.0" # Todo: combine with the one in parser.py
+            env[
+                "RUSTUP_TOOLCHAIN"
+            ] = "1.30.0"  # Todo: combine with the one in parser.py
             volumes = {
                 self.paths["storage_python"]: self.paths["docker_storage_python"],
                 self.paths["storage_venv"]: self.paths["docker_storage_venv"],
@@ -262,4 +265,3 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 "cran": self.cran_mode,
             }
         }
-
