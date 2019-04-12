@@ -244,7 +244,7 @@ class Dockerator:
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
-        for key, value in env.items():
+        for key, value in sorted(env.items()):
             cmd.append("-e")
             cmd.append("%s=%s" % (key, value))
         cmd.append("-u")
@@ -261,7 +261,7 @@ class Dockerator:
         for from_port, to_port in ports:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 
-        cmd.extend(["-w", "/project"])
+        cmd.extend(["--workdir", "/project"])
         cmd.append("--network=host")
         cmd.extend([self.docker_image, "/bin/bash", "/dockerator/run.sh"])
         last_was_dash = True
@@ -271,9 +271,9 @@ class Dockerator:
                 last_was_dash = True
             else:
                 if last_was_dash:
-                    print(x)
+                    print(x, end=" \\\n")
                 else:
-                    print("  " + x)
+                    print("  " + x, end=" \\\n")
                 last_was_dash = False
         print("")
         return cmd, tf
@@ -370,6 +370,7 @@ class Dockerator:
                     pass  # written in _run_docker
                 else:
                     print("container stdout/stderr", container_result)
+                print((Path(build_dir) / relative_check_filename), 'was missing')
                 raise ValueError(
                     "Docker build failed. Investigate " + str(self.paths[log_name])
                 )
