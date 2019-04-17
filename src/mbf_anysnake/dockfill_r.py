@@ -7,20 +7,20 @@ from .util import combine_volumes, find_storage_path_from_other_machine
 
 
 class DockFill_R:
-    def __init__(self, dockerator):
-        self.dockerator = dockerator
-        self.paths = self.dockerator.paths
-        self.R_version = self.dockerator.R_version
-        self.cran_mirror = self.dockerator.cran_mirror
+    def __init__(self, anysnake):
+        self.anysnake = anysnake
+        self.paths = self.anysnake.paths
+        self.R_version = self.anysnake.R_version
+        self.cran_mirror = self.anysnake.cran_mirror
 
         self.paths.update(
             {
                 "storage_r": find_storage_path_from_other_machine(
-                    self.dockerator, Path("R") / self.R_version
+                    self.anysnake, Path("R") / self.R_version
                 ),
-                "docker_storage_r": "/dockerator/R",
+                "docker_storage_r": "/anysnake/R",
                 "log_r": self.paths["log_storage"]
-                / f"dockerator.R.{self.R_version}.log",
+                / f"anysnake.R.{self.R_version}.log",
             }
         )
         self.volumes = {self.paths["storage_r"]: self.paths["docker_storage_r"]}
@@ -44,14 +44,14 @@ class DockFill_R:
     def ensure(self):
         # todo: switch to cdn by default / config in file
         r_url = (
-            self.dockerator.cran_mirror
+            self.anysnake.cran_mirror
             + "src/base/R-"
-            + self.dockerator.R_version[0]
+            + self.anysnake.R_version[0]
             + "/R-"
-            + self.dockerator.R_version
+            + self.anysnake.R_version
             + ".tar.gz"
         )
-        return self.dockerator.build(
+        return self.anysnake.build(
             target_dir=self.paths["storage_r"],
             target_dir_inside_docker=self.paths["docker_storage_r"],
             relative_check_filename="bin/R",
@@ -62,9 +62,9 @@ class DockFill_R:
 cd ~
 wget {r_url} -O R.tar.gz
 tar xf R.tar.gz
-cd R-{self.dockerator.R_version}
+cd R-{self.anysnake.R_version}
 ./configure --prefix={self.paths['docker_storage_r']} --enable-R-shlib --with-blas --with-lapack --with-x=no
-make -j {self.dockerator.cores}
+make -j {self.anysnake.cores}
 make install
 
 echo "done"
@@ -73,11 +73,11 @@ echo "done"
 
 
 class DockFill_Rpy2:
-    def __init__(self, dockerator, dockfill_py, dockfill_r):
-        self.dockerator = dockerator
-        self.paths = self.dockerator.paths
-        self.python_version = self.dockerator.python_version
-        self.R_version = self.dockerator.R_version
+    def __init__(self, anysnake, dockfill_py, dockfill_r):
+        self.anysnake = anysnake
+        self.paths = self.anysnake.paths
+        self.python_version = self.anysnake.python_version
+        self.R_version = self.anysnake.R_version
         self.dockfill_python = dockfill_py
         self.dockfill_r = dockfill_r
 
@@ -85,17 +85,17 @@ class DockFill_Rpy2:
             {
                 "storage_rpy2": (
                     find_storage_path_from_other_machine(
-                        self.dockerator,
+                        self.anysnake,
                         Path("rpy2") / f"{self.python_version}_{self.R_version}_1",
                     )
                 ),
-                "docker_storage_rpy2": "/dockerator/rpy2",
+                "docker_storage_rpy2": "/anysnake/rpy2",
                 "log_rpy2": self.paths["log_storage"]
-                / f"dockerator.rpy2.{self.python_version}-{self.R_version}.log",
+                / f"anysnake.rpy2.{self.python_version}-{self.R_version}.log",
             }
         )
         self.volumes = {self.paths["storage_rpy2"]: self.paths["docker_storage_rpy2"]}
-        self.env = {'LD_LIBRARY_PATH': "/dockerator/R/lib/R/lib"}
+        self.env = {'LD_LIBRARY_PATH': "/anysnake/R/lib/R/lib"}
 
     def pprint(self):
         pass
@@ -103,10 +103,10 @@ class DockFill_Rpy2:
     def ensure(self):
         # TODO: This will probably need fine tuning for combining older Rs and the
         # latest rpy2 version that supported them
-        return self.dockerator.build(
+        return self.anysnake.build(
             target_dir=self.paths["storage_rpy2"],
             target_dir_inside_docker=self.paths["docker_storage_rpy2"],
-            relative_check_filename=f"lib/python{self.dockerator.major_python_version}/site-packages/rpy2/__init__.py",
+            relative_check_filename=f"lib/python{self.anysnake.major_python_version}/site-packages/rpy2/__init__.py",
             log_name=f"log_rpy2",
             additional_volumes=combine_volumes(
                 ro=[self.dockfill_python.volumes, self.dockfill_r.volumes]

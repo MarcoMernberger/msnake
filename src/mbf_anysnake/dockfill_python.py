@@ -11,24 +11,24 @@ from .util import combine_volumes, find_storage_path_from_other_machine
 
 
 class DockFill_Python:
-    def __init__(self, dockerator):
-        self.dockerator = dockerator
-        self.python_version = self.dockerator.python_version
-        self.paths = self.dockerator.paths
+    def __init__(self, anysnake):
+        self.anysnake = anysnake
+        self.python_version = self.anysnake.python_version
+        self.paths = self.anysnake.paths
 
         self.paths.update(
             {
                 "storage_python": find_storage_path_from_other_machine(
-                    self.dockerator, Path("python") / self.python_version
+                    self.anysnake, Path("python") / self.python_version
                 ),
-                "docker_storage_python": "/dockerator/python",
+                "docker_storage_python": "/anysnake/python",
                 "docker_code": "/project/code",
                 "log_python": self.paths["log_storage"]
-                / f"dockerator.python.{self.python_version}.log",
+                / f"anysnake.python.{self.python_version}.log",
             }
         )
         self.volumes = {
-            dockerator.paths["storage_python"]: dockerator.paths[
+            anysnake.paths["storage_python"]: anysnake.paths[
                 "docker_storage_python"
             ]
         }
@@ -42,7 +42,7 @@ class DockFill_Python:
         # on older debians/ubuntus that would be libssl-dev
         # but on 18.04+ it's libssl1.0-dev
         # and we're not anticipating building on something older
-        python_version = self.dockerator.python_version
+        python_version = self.anysnake.python_version
         if (
             (python_version >= "3.5.3")
             or (python_version >= "3.6.0")
@@ -57,7 +57,7 @@ class DockFill_Python:
             ssl_lib = "libssl1.0-dev"
             ssl_cmd = f"sudo apt-get install -y {ssl_lib}"
 
-        return self.dockerator.build(
+        return self.anysnake.build(
             target_dir=self.paths["storage_python"],
             target_dir_inside_docker=self.paths["docker_storage_python"],
             relative_check_filename="bin/virtualenv",
@@ -73,7 +73,7 @@ cd pyenv/plugins/python-build
 ./install.sh
 {ssl_cmd}
 
-export MAKE_OPTS=-j{self.dockerator.cores}
+export MAKE_OPTS=-j{self.anysnake.cores}
 export CONFIGURE_OPTS=--enable-shared
 export PYTHON_CONFIGURE_OPTS=--enable-shared
 python-build {python_version} {self.paths['docker_storage_python']}
@@ -137,10 +137,10 @@ class _DockerFillVenv:
         self.paths.update(
             {
                 f"log_{self.name}_venv": (
-                    self.log_path / f"dockerator.{self.name}_venv.log"
+                    self.log_path / f"anysnake.{self.name}_venv.log"
                 ),
                 f"log_{self.name}_venv_pip": (
-                    self.log_path / f"dockerator.{self.name}_venv_pip.log"
+                    self.log_path / f"anysnake.{self.name}_venv_pip.log"
                 ),
             }
         )
@@ -166,7 +166,7 @@ class _DockerFillVenv:
             had_to_clone = code_names
         else:
             installed_versions = self.find_installed_package_versions(
-                self.dockerator.major_python_version
+                self.anysnake.major_python_version
             )
             for c in code_names:
                 if safe_name(c) not in installed_versions:
@@ -220,7 +220,7 @@ class _DockerFillVenv:
         for name, url_spec in code_packages.items():
             log_key = f"log_{self.name}_venv_{name}"
             self.paths[log_key + "_clone"] = self.log_path / (
-                f"dockerator.{self.name}_venv_{name}.pip.log"
+                f"anysnake.{self.name}_venv_{name}.pip.log"
             )
             target_path = self.clone_path / name
             with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
@@ -342,18 +342,18 @@ class _DockerFillVenv:
             }
         env = {}
         paths = [self.target_path_inside_docker + "/bin"]
-        if self.dockerator.dockfill_rust is not None: # if we have a rust, use it
-            volumes_ro.update(self.dockerator.dockfill_rust.volumes)
-            volumes_rw.update(self.dockerator.dockfill_rust.rw_volumes)
-            paths.append(self.dockerator.dockfill_rust.shell_path)
-            env.update(self.dockerator.dockfill_rust.env)
+        if self.anysnake.dockfill_rust is not None: # if we have a rust, use it
+            volumes_ro.update(self.anysnake.dockfill_rust.volumes)
+            volumes_rw.update(self.anysnake.dockfill_rust.rw_volumes)
+            paths.append(self.anysnake.dockfill_rust.shell_path)
+            env.update(self.anysnake.dockfill_rust.env)
         if needs_pyo3_pack:
-            if self.dockerator.dockfill_rust is None:
+            if self.anysnake.dockfill_rust is None:
                 raise ValueError("pyo3 package but no Rust definied")
         env['EXTPATH'] = ":".join(paths)
-#/dockerator/code_venv/bin /dockerator/cargo/bin /dockerator/code_venv/bin /dockerator/storage_venv/bin /dockerator/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
+#/anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
 
-        return_code, logs = self.dockerator._run_docker(
+        return_code, logs = self.anysnake._run_docker(
             f"""
 #!/bin/bash
     export PATH=$PATH:$EXTPATH
@@ -371,7 +371,7 @@ class _DockerFillVenv:
             f"log_{self.name}_venv_pip",
         )
         installed_now = self.find_installed_packages(
-            self.dockerator.major_python_version
+            self.anysnake.major_python_version
         )
         still_missing = set([safe_name(k) for k in packages.keys()]).difference(
             [safe_name(k) for k in installed_now]
@@ -392,17 +392,17 @@ class _DockerFillVenv:
 
 
 class DockFill_GlobalVenv(_DockerFillVenv):
-    def __init__(self, dockerator, dockfill_python):
-        self.dockerator = dockerator
-        self.paths = self.dockerator.paths
-        self.python_version = self.dockerator.python_version
+    def __init__(self, anysnake, dockfill_python):
+        self.anysnake = anysnake
+        self.paths = self.anysnake.paths
+        self.python_version = self.anysnake.python_version
         self.name = "storage"
         self.paths.update(
             {
                 "storage_venv": (self.paths["storage"] / "venv" / self.python_version),
-                "docker_storage_venv": "/dockerator/storage_venv",
+                "docker_storage_venv": "/anysnake/storage_venv",
                 "storage_clones": self.paths["storage"] / "code",
-                "docker_storage_clones": "/dockerator/storage_clones",
+                "docker_storage_clones": "/anysnake/storage_clones",
             }
         )
         self.target_path = self.paths["storage_venv"]
@@ -413,20 +413,20 @@ class DockFill_GlobalVenv(_DockerFillVenv):
 
         self.dockfill_python = dockfill_python
         self.volumes = {
-            self.paths["storage_venv"]: dockerator.paths["docker_storage_venv"],
-            self.paths["storage_clones"]: dockerator.paths["docker_storage_clones"],
+            self.paths["storage_venv"]: anysnake.paths["docker_storage_venv"],
+            self.paths["storage_clones"]: anysnake.paths["docker_storage_clones"],
         }
-        self.packages = self.dockerator.global_python_packages
+        self.packages = self.anysnake.global_python_packages
         self.shell_path = str(Path(self.paths["docker_storage_venv"]) / "bin")
         super().__init__()
 
     def pprint(self):
         print("  Global python packages")
-        for entry in self.dockerator.global_python_packages.items():
+        for entry in self.anysnake.global_python_packages.items():
             print(f"    {entry}")
 
     def create_venv(self):
-        return self.dockerator.build(
+        return self.anysnake.build(
             target_dir=self.target_path,
             target_dir_inside_docker=self.target_path_inside_docker,
             relative_check_filename=Path("bin") / "activate.fish",
@@ -442,24 +442,24 @@ echo "done"
         """Return a toml string with all the installed versions"""
         result = {}
         for k, v in self.find_installed_package_versions(
-            self.dockerator.major_python_version
+            self.anysnake.major_python_version
         ).items():
             result[k] = f"{v}"
         return {"global_python": result}
 
 
 class DockFill_CodeVenv(_DockerFillVenv):
-    def __init__(self, dockerator, dockfill_python, dockfill_global_venv):
-        self.dockerator = dockerator
+    def __init__(self, anysnake, dockfill_python, dockfill_global_venv):
+        self.anysnake = anysnake
         self.dockfill_global_venv = dockfill_global_venv
-        self.paths = self.dockerator.paths
+        self.paths = self.anysnake.paths
         self.name = "code"
         self.log_path = self.paths["log_code"]
-        self.python_version = self.dockerator.python_version
+        self.python_version = self.anysnake.python_version
         self.paths.update(
             {
                 "code_venv": self.paths["code"] / "venv" / self.python_version,
-                "docker_code_venv": "/dockerator/code_venv",
+                "docker_code_venv": "/anysnake/code_venv",
                 "code_clones": self.paths["code"],
                 "docker_code_clones": "/project/code",
             }
@@ -469,9 +469,9 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.clone_path = self.paths["code_clones"]
         self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
-        self.volumes = {self.paths["code_venv"]: dockerator.paths[f"docker_code_venv"]}
-        self.rw_volumes = {self.paths["code"]: dockerator.paths[f"docker_code"]}
-        self.packages = self.dockerator.local_python_packages
+        self.volumes = {self.paths["code_venv"]: anysnake.paths[f"docker_code_venv"]}
+        self.rw_volumes = {self.paths["code"]: anysnake.paths[f"docker_code"]}
+        self.packages = self.anysnake.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()
 
@@ -510,7 +510,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
         pth_path = (
             self.paths["code_venv"]
             / "lib"
-            / ("python" + self.dockerator.major_python_version)
+            / ("python" + self.anysnake.major_python_version)
             / "site-packages"
             / "anysnake.pth"
         )
@@ -519,7 +519,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
                 str(
                     self.paths["docker_storage_venv"]
                     / "lib"
-                    / ("python" + self.dockerator.major_python_version)
+                    / ("python" + self.anysnake.major_python_version)
                     / "site-packages"
                 )
                 + "\n"
@@ -527,14 +527,14 @@ class DockFill_CodeVenv(_DockerFillVenv):
 
     def pprint(self):
         print("  Local python packages")
-        for entry in self.dockerator.local_python_packages.items():
+        for entry in self.anysnake.local_python_packages.items():
             print(f"    {entry}")
 
     def create_venv(self):
        
         additional_volumes = self.dockfill_python.volumes.copy()
 
-        self.dockerator.build(
+        self.anysnake.build(
             target_dir=self.target_path,
             target_dir_inside_docker=self.target_path_inside_docker,
             relative_check_filename=Path("bin") / "activate.fish",
@@ -552,23 +552,23 @@ echo "done"
         lib_code = (
             Path(self.paths["docker_code_venv"])
             / "lib"
-            / ("python" + self.dockerator.major_python_version)
+            / ("python" + self.anysnake.major_python_version)
         )
         lib_storage = (
             Path(self.paths["docker_storage_venv"])
             / "lib"
-            / ("python" + self.dockerator.major_python_version)
+            / ("python" + self.anysnake.major_python_version)
         )
         if 'docker_storage_rpy2' in self.paths:
             lib_rpy2 = (Path(self.paths["docker_storage_rpy2"])
             / "lib"
-            / ("python" + self.dockerator.major_python_version)
+            / ("python" + self.anysnake.major_python_version)
                         )
             rpy2_venv_str = f"'{lib_rpy2}/site-packages',"
         else:
             rpy2_venv_str = ''
         sc_file = str(self.paths['code_venv']  / "lib"
-            / ("python" + self.dockerator.major_python_version) / "site-packages" / "sitecustomize.py")
+            / ("python" + self.anysnake.major_python_version) / "site-packages" / "sitecustomize.py")
 
         tf = open(sc_file, 'w')
         tf.write(
@@ -602,7 +602,7 @@ for x in [
         """Return a toml string with all the installed versions"""
         result = {}
         for k, v in self.find_installed_package_versions(
-            self.dockerator.major_python_version
+            self.anysnake.major_python_version
         ).items():
             result[k] = f"{v}"
         return {"python": result}

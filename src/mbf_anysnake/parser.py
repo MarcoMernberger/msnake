@@ -2,7 +2,7 @@
 import re
 import os
 from pathlib import Path
-from .dockerator import Dockerator
+from .anysnake import Anysnake
 import tomlkit
 
 
@@ -50,7 +50,7 @@ def parse_requirements(req_file):
     return p
 
 
-def parsed_to_dockerator(parsed):
+def parsed_to_anysnake(parsed):
     if not "base" in parsed:
         raise ValueError("no [base] in configuration")
     base = parsed["base"]
@@ -114,7 +114,7 @@ def parsed_to_dockerator(parsed):
         rust_versions.append("1.30.0")
     cargo_install = parsed.get("cargo_install")
 
-    return Dockerator(
+    return Anysnake(
         docker_image,
         python_version,
         bioconductor_version,

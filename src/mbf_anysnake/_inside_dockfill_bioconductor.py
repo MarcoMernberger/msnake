@@ -162,11 +162,11 @@ def install_bioconductor():
     whitelist = os.environ["BIOCONDUCTOR_WHITELIST"].split(":")
 
     logging.basicConfig(
-        filename="/dockerator/bioconductor/ppg.log", level=logging.INFO, filemode="w"
+        filename="/anysnake/bioconductor/ppg.log", level=logging.INFO, filemode="w"
     )
     cpus = int(ppg.util.CPUs() * 1.25)  # rule of thumb to achieve maximum throughupt
     ppg.new_pipegraph(
-        invariant_status_filename="/dockerator/bioconductor/.ppg_status",
+        invariant_status_filename="/anysnake/bioconductor/.ppg_status",
         resource_coordinator=ppg.resource_coordinators.LocalSystem(
             max_cores_to_use=cpus, interactive=False
         ),
@@ -242,13 +242,13 @@ def windows_only_packages(pkgs):
 
 def load_packages(name, url):
     """load the package info from disk"""
-    fn = "/dockerator/bioconductor_download/%s.PACKAGES" % name
+    fn = "/anysnake/bioconductor_download/%s.PACKAGES" % name
     info = RPackageInfo(url, name, fn)
     return info
 
 
 def write_done_sentinel(cran_mode, whitelist):
-    Path("/dockerator/bioconductor/done.sentinel").write_text(
+    Path("/anysnake/bioconductor/done.sentinel").write_text(
         "done:" + cran_mode + ":" + ":".join(sorted(whitelist))
     )
 
@@ -292,7 +292,7 @@ def build_jobs(pkgs):
 
 def job_download(info):
     """Download the package defined in info"""
-    target_fn = f'/dockerator/bioconductor_download/{info["repo"]}/{info["name"]}_{info["version"]}.tar.gz'
+    target_fn = f'/anysnake/bioconductor_download/{info["repo"]}/{info["name"]}_{info["version"]}.tar.gz'
 
     def download():
         p = Path(target_fn)
@@ -313,14 +313,14 @@ def job_download(info):
 def job_install(info):
     """install the package defined in info"""
     sentinel_file = Path(
-        "/dockerator/bioconductor/%s/%s.sentinel" % (info["name"], info["name"])
+        "/anysnake/bioconductor/%s/%s.sentinel" % (info["name"], info["name"])
     )
 
     def do():
-        R_cmd = ["/dockerator/R/bin/R", "--no-save"]
+        R_cmd = ["/anysnake/R/bin/R", "--no-save"]
         r_build_script = """
 
-        lib = "/dockerator/bioconductor/"
+        lib = "/anysnake/bioconductor/"
         .libPaths(c(lib, .libPaths()))
 
         #some packages need python - let's give em a virtualenv...
@@ -329,12 +329,12 @@ def job_install(info):
             if (requireNamespace("reticulate"))
             {
                 library(reticulate)
-                use_python("/dockerator/python/bin/python")
-                use_virtualenv("/dockerator/storage_venv")
+                use_python("/anysnake/python/bin/python")
+                use_virtualenv("/anysnake/storage_venv")
             }
         }
         print(Sys.getenv())
-        install.packages("/dockerator/bioconductor_download/%s/%s_%s.tar.gz",
+        install.packages("/anysnake/bioconductor_download/%s/%s_%s.tar.gz",
                 lib=lib,
                 repos=NULL,
                 type='source',
@@ -349,7 +349,7 @@ def job_install(info):
             str(sentinel_file),
         )
         # tf = tempfile.NamedTemporaryFile(suffix=".r")
-        target_dir = Path("/dockerator/bioconductor") / info["name"]
+        target_dir = Path("/anysnake/bioconductor") / info["name"]
         target_dir.mkdir(exist_ok=True)
         tf = target_dir / "rinstall.r"
         tf.write_bytes(r_build_script.encode("utf-8"))
@@ -359,9 +359,9 @@ def job_install(info):
         env[
             "R_DONT_USE_TK"
         ] = "true"  # otherwise the tk package will loop endlessly on modern linux
-        env["R_LIBS_SITE"] = "/dockerator/bioconductor"
+        env["R_LIBS_SITE"] = "/anysnake/bioconductor"
         env["R_LIBS_USER"] = ""
-        env["PATH"] = ":".join(env["PATH"].split(":") + ["/dockerator/R/bin"])
+        env["PATH"] = ":".join(env["PATH"].split(":") + ["/anysnake/R/bin"])
         env["PYTHONPATH"] = ":".join(
             env.get("PYTHONPATH", "").split(":") + [x for x in sys.path if x]
         )

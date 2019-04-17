@@ -5,8 +5,8 @@ import shutil
 from pathlib import Path
 
 
-def run_tests(modules, dockerator, config, report_only=False):
-    all_modules = discover_modules(dockerator.paths["code"])
+def run_tests(modules, anysnake, config, report_only=False):
+    all_modules = discover_modules(anysnake.paths["code"])
     if not modules:
         modules = all_modules
     else:
@@ -23,7 +23,7 @@ def run_tests(modules, dockerator, config, report_only=False):
     error_dir.mkdir()
     print("output results to", output_dir)
     if not report_only:
-        multiplex_tests(modules, output_dir, dockerator, config)
+        multiplex_tests(modules, output_dir, anysnake, config)
     report_tests(modules, output_dir)
 
 
@@ -37,11 +37,11 @@ def discover_modules(code_path):
     return res
 
 
-def multiplex_tests(modules, output_dir, dockerator, config):
+def multiplex_tests(modules, output_dir, anysnake, config):
     cmds = [
         (
             f"cd /project/code/{module} && pytest --junitxml=/project/{output_dir}/{module}.log --html=/project/{output_dir}/html/{module}.html",
-            dockerator,
+            anysnake,
             config,
             ii,
         )
@@ -78,11 +78,11 @@ def report_tests(modules, output_dir):
 
 
 def run_single_test(args):
-    cmd, dockerator, config, ii = args
+    cmd, anysnake, config, ii = args
     from .cli import home_files, get_volumes_config
 
     time.sleep(0.01 * ii)
-    return dockerator.run_non_interactive(
+    return anysnake.run_non_interactive(
         cmd,
         allow_writes=False,
         home_files=home_files,

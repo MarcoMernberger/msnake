@@ -5,8 +5,8 @@ from pathlib import Path
 
 
 class DockFill_Rust:
-    def __init__(self, dockerator, rust_versions, cargo_install):
-        self.dockerator = dockerator
+    def __init__(self, anysnake, rust_versions, cargo_install):
+        self.anysnake = anysnake
         self.rust_versions = rust_versions
         for v in rust_versions:
             if v.startswith("nigthly") and not re.match(r"nigthly-\d{4}-\d\d-\d\d", v):
@@ -17,7 +17,7 @@ class DockFill_Rust:
                 raise ValueError(
                     "stable is auto updating - use a definied version (e.g. 1.30.0) instead"
                 )
-        self.paths = self.dockerator.paths
+        self.paths = self.anysnake.paths
         self.paths.update(
             {
                 # this does not use the find_storage_path_from_other_machine
@@ -25,10 +25,10 @@ class DockFill_Rust:
                 # but the cargo stuff needs to be per machine because 
                 # the downloads happen there.
                 "storage_rustup": self.paths['storage'] / 'rustup_home', 
-                "docker_storage_rustup": Path("/dockerator/rustup_home"),
+                "docker_storage_rustup": Path("/anysnake/rustup_home"),
                 "storage_cargo": self.paths["storage"] / "rust_cargo",
-                "docker_storage_cargo": Path("/dockerator/cargo"),
-                "log_rust": (self.paths["log_storage"] / f"dockerator.rust.log"),
+                "docker_storage_cargo": Path("/anysnake/cargo"),
+                "log_rust": (self.paths["log_storage"] / f"anysnake.rust.log"),
             }
         )
         self.volumes = {
@@ -63,19 +63,19 @@ class DockFill_Rust:
             }
             cmd = f"""
         sh $RUSTUP_HOME/rustup.sh -y --default-toolchain none
-        mkdir -p $RUSTUP_HOME/dockerator
+        mkdir -p $RUSTUP_HOME/anysnake
         export PATH=$PATH:$CARGO_HOME/bin
         echo "rustup default {self.rust_versions[0]}"
         rustup default {self.rust_versions[0]}
             """
             for version in self.rust_versions:
                 if not version in installed_versions:
-                    cmd += f"rustup toolchain install {version} && cargo && touch $RUSTUP_HOME/dockerator/{version}.done\n"
+                    cmd += f"rustup toolchain install {version} && cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
             volumes = {
                 self.paths["storage_rustup"]: self.paths["docker_storage_rustup"],
                 self.paths["storage_cargo"]: self.paths["docker_storage_cargo"],
             }
-            self.dockerator._run_docker(
+            self.anysnake._run_docker(
                 cmd, {"volumes": volumes, "environment": env}, "log_rust", root=True
             )
             installed_now = self.get_installed_rust_versions()
@@ -88,7 +88,8 @@ class DockFill_Rust:
 
     def get_installed_rust_versions(self):
         result = set()
-        p = self.paths["storage_rustup"] / "dockerator"
+        p = self.paths["storage_rustup"] / "anysnake"
+        print(p)
         if p.exists():
             for d in p.glob("*.done"):
                 v = d.name[:-5]

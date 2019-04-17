@@ -21,19 +21,19 @@ def combine_volumes(ro=[], rw=[]):
     return d
 
 
-def find_storage_path_from_other_machine(dockerator, postfix, check_func=None):
+def find_storage_path_from_other_machine(anysnake, postfix, check_func=None):
     """Find a usable storage path for this if it was already done by another machine
     and storage_per_hostname is set. 
     Otherwise return the local storage_path / postfix
     """
     if check_func is None:
         check_func = lambda x: x.exists()
-    search_path = dockerator.paths["storage"].parent.parent
-    docker_image = Path(dockerator.paths["storage"].name)
-    result = dockerator.paths["storage"] / postfix
+    search_path = anysnake.paths["storage"].parent.parent
+    docker_image = Path(anysnake.paths["storage"].name)
+    result = anysnake.paths["storage"] / postfix
     postfix = docker_image / postfix
     if not result.exists():
-        if dockerator.storage_per_hostname:
+        if anysnake.storage_per_hostname:
             for d in search_path.glob("*"):
                 if d.is_dir():
                     if check_func(d / postfix):

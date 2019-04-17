@@ -7,41 +7,41 @@ from .util import find_storage_path_from_other_machine, download_file
 
 
 class DockFill_Bioconductor:
-    def __init__(self, dockerator, dockfill_r):
-        self.dockerator = dockerator
+    def __init__(self, anysnake, dockfill_r):
+        self.anysnake = anysnake
         self.dockfill_r = dockfill_r
-        self.paths = self.dockerator.paths
-        self.bioconductor_version = dockerator.bioconductor_version
-        self.bioconductor_whitelist = dockerator.bioconductor_whitelist
-        self.cran_mode = dockerator.cran_mode
+        self.paths = self.anysnake.paths
+        self.bioconductor_version = anysnake.bioconductor_version
+        self.bioconductor_whitelist = anysnake.bioconductor_whitelist
+        self.cran_mode = anysnake.cran_mode
 
         self.done_string = (
             "done:" + self.cran_mode + ":" + ":".join(self.bioconductor_whitelist)
         )
         bc_path = find_storage_path_from_other_machine(
-            self.dockerator,
+            self.anysnake,
             Path("bioconductor") / self.bioconductor_version,
             self.is_done,
         )
         self.paths.update(
             {
                 "storage_bioconductor": bc_path,
-                "docker_storage_bioconductor": "/dockerator/bioconductor",
+                "docker_storage_bioconductor": "/anysnake/bioconductor",
                 "storage_bioconductor_download": (
                     self.paths["storage"]
                     / "bioconductor_download"
                     / self.bioconductor_version
                 ),
                 "docker_storage_bioconductor_download": (
-                    str(Path("/dockerator/bioconductor_download"))
+                    str(Path("/anysnake/bioconductor_download"))
                 ),
                 "log_bioconductor": (
                     self.paths["log_storage"]
-                    / f"dockerator.bioconductor.{self.bioconductor_version}.log"
+                    / f"anysnake.bioconductor.{self.bioconductor_version}.log"
                 ),
                 "log_bioconductor.todo": (
                     self.paths["log_storage"]
-                    / f"dockerator.bioconductor.{self.bioconductor_version}.todo.log"
+                    / f"anysnake.bioconductor.{self.bioconductor_version}.todo.log"
                 ),
             }
         )
@@ -53,7 +53,7 @@ class DockFill_Bioconductor:
                 "docker_storage_bioconductor_download"
             ],
         }
-        self.env = {"R_LIBS_SITE": "/dockerator/bioconductor"}
+        self.env = {"R_LIBS_SITE": "/anysnake/bioconductor"}
 
     def is_done(self, path):
         done_file = path / "done.sentinel"
@@ -127,7 +127,7 @@ class DockFill_Bioconductor:
         return info
 
     @classmethod
-    def bioconductor_relase_information(cls, dockerator):
+    def bioconductor_relase_information(cls, anysnake):
         """Fetch the information, annotate it with a viable minor release,
         and cache the results.
 
@@ -138,26 +138,26 @@ class DockFill_Bioconductor:
         """
         import tomlkit
 
-        dockerator.paths.update(
+        anysnake.paths.update(
             {
                 "storage_bioconductor_release_info": (
-                    dockerator.paths["storage"]
+                    anysnake.paths["storage"]
                     / "bioconductor_release_info"
-                    / dockerator.bioconductor_version
+                    / anysnake.bioconductor_version
                 )
             }
         )
-        cache_file = dockerator.paths["storage_bioconductor_release_info"]
+        cache_file = anysnake.paths["storage_bioconductor_release_info"]
         if not cache_file.exists():
             cache_file.parent.mkdir(exist_ok=True, parents=True)
             all_info = cls.fetch_bioconductor_release_information()
-            if not dockerator.bioconductor_version in all_info:
+            if not anysnake.bioconductor_version in all_info:
                 raise ValueError(
-                    f"Could not find bioconductor {dockerator.bioconductor_version} - check https://bioconductor.org/about/release-announcements/"
+                    f"Could not find bioconductor {anysnake.bioconductor_version} - check https://bioconductor.org/about/release-announcements/"
                 )
-            info = all_info[dockerator.bioconductor_version]
+            info = all_info[anysnake.bioconductor_version]
             major = info["r_major_version"]
-            url = dockerator.cran_mirror + "src/base/R-" + major[0]
+            url = anysnake.cran_mirror + "src/base/R-" + major[0]
             r = requests.get(url).text
             available = re.findall("R-(" + major + r"\.\d+).tar.gz", r)
             matching = [x for x in available if x.startswith(major)]
@@ -170,13 +170,13 @@ class DockFill_Bioconductor:
         return tomlkit.loads(raw)
 
     @classmethod
-    def find_r_from_bioconductor(cls, dockerator):
-        return cls.bioconductor_relase_information(dockerator)["r_version"]
+    def find_r_from_bioconductor(cls, anysnake):
+        return cls.bioconductor_relase_information(anysnake)["r_version"]
 
     def check_r_bioconductor_match(self):
         info = self.get_bioconductor_release_information()
         major = info["r_major_version"]
-        if not self.dockerator.R_version.startswith(major):
+        if not self.anysnake.R_version.startswith(major):
             raise ValueError(
                 f"bioconductor {self.bioconductor_version} requires R {major}.*, but you requested {self.R_version}"
             )
@@ -185,7 +185,7 @@ class DockFill_Bioconductor:
         done_file = self.paths["storage_bioconductor"] / "done.sentinel"
         should = self.done_string
         if not done_file.exists() or done_file.read_text() != should:
-            info = self.bioconductor_relase_information(self.dockerator)
+            info = self.bioconductor_relase_information(self.anysnake)
             # bioconductor can really only be reliably installed with the CRAN
             # packages against which it was developed
             # arguably, that's an illdefined problem
@@ -213,7 +213,7 @@ class DockFill_Bioconductor:
 {self.paths['docker_storage_python']}/bin/virtualenv /tmp/venv
 source /tmp/venv/bin/activate
 pip install pypipegraph requests future-fstrings packaging numpy
-export PATH=$PATH:/dockerator/cargo/bin/cargo
+export PATH=$PATH:/anysnake/cargo/bin/cargo
 python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconductor.py
 """
             env = {"URL_%s" % k.upper(): v for (k, v) in urls.items()}
@@ -242,7 +242,7 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 self.paths["storage_cargo"]: self.paths["docker_storage_cargo"],
             }
             print("calling bioconductor install docker")
-            self.dockerator._run_docker(
+            self.anysnake._run_docker(
                 bash_script,
                 {"volumes": volumes, "environment": env},
                 "log_bioconductor",

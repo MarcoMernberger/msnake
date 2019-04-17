@@ -6,9 +6,9 @@ import docker
 
 
 class DockFill_Docker:
-    def __init__(self, dockerator):
-        self.dockerator = dockerator
-        self.paths = self.dockerator.paths
+    def __init__(self, anysnake):
+        self.anysnake = anysnake
+        self.paths = self.anysnake.paths
         self.paths.update(
             {
                 "docker_image_build_scripts": (
@@ -26,12 +26,12 @@ class DockFill_Docker:
         tags_available = set()
         for img in client.images.list():
             tags_available.update(img.tags)
-        if self.dockerator.docker_image in tags_available:
+        if self.anysnake.docker_image in tags_available:
             pass
         else:
             bs = (
                 self.paths["docker_image_build_scripts"]
-                / self.dockerator.docker_image[: self.dockerator.docker_image.rfind(":")]
+                / self.anysnake.docker_image[: self.anysnake.docker_image.rfind(":")]
                 / "build.sh"
             )
             if bs.exists():
@@ -39,11 +39,11 @@ class DockFill_Docker:
                 subprocess.check_call([str(bs)], cwd=str(bs.parent))
             else:
                 print(bs, "not found")
-                client.images.pull(self.dockerator.docker_image)
+                client.images.pull(self.anysnake.docker_image)
         return False
 
     def pprint(self):
-        print(f"  docker_image = {self.dockerator.docker_image}")
+        print(f"  docker_image = {self.anysnake.docker_image}")
 
     def get_dockerfile_hash(self, docker_image_name):
         import hashlib

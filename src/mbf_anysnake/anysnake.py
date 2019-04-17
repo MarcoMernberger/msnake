@@ -19,7 +19,7 @@ from .dockfill_rust import DockFill_Rust
 from .util import combine_volumes
 
 
-class Dockerator:
+class Anysnake:
     """Wrap ubuntu version (=docker image),
     Python version,
     R version,
@@ -132,7 +132,7 @@ class Dockerator:
                 self.environment_variables.update(df.env)
 
     def pprint(self):
-        print("Dockerator")
+        print("Anysnake")
         print(f"  Storage path: {self.paths['storage']}")
         print(f"  local code path: {self.paths['code']}")
         print(f"  global logs in: {self.paths['log_storage']}")
@@ -211,13 +211,13 @@ class Dockerator:
             + ":$PATH"
         )
         tf.write(f"export PATH={path_str}\n")
-        tf.write("source /dockerator/code_venv/bin/activate\n")
+        tf.write("source /anysnake/code_venv/bin/activate\n")
         tf.write(bash_script)
         print("bash script", bash_script)
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
-        ro_volumes = [{tf.name: "/dockerator/run.sh"}]
+        ro_volumes = [{tf.name: "/anysnake/run.sh"}]
         rw_volumes = [{os.path.abspath("."): "/project"}]
         for h in home_files:
             p = Path("~").expanduser() / h
@@ -243,6 +243,8 @@ class Dockerator:
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
+        volumes = {source: target for (source, target) in volumes.items() if
+                   Path(source).exists()}
 
         cmd = ["docker", "run", "-it", "--rm"]
         for outside_path, v in sorted(volumes.items()):
@@ -270,7 +272,7 @@ class Dockerator:
 
         cmd.extend(["--workdir", "/project"])
         cmd.append("--network=host")
-        cmd.extend([self.docker_image, "/bin/bash", "/dockerator/run.sh"])
+        cmd.extend([self.docker_image, "/bin/bash", "/anysnake/run.sh"])
         last_was_dash = True
         for x in cmd:
             if x.startswith("-") and not x.startswith("--"):
@@ -301,7 +303,7 @@ class Dockerator:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {tf.name: "/dockerator/run.sh"}
+        volumes = {tf.name: "/anysnake/run.sh"}
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
@@ -317,7 +319,7 @@ class Dockerator:
         tf.write(bash_script)
         tf.flush()
         container = client.containers.create(
-            docker_image, "/bin/bash /dockerator/run.sh", **run_kwargs
+            docker_image, "/bin/bash /anysnake/run.sh", **run_kwargs
         )
         try:
             return_code = -1
@@ -397,7 +399,7 @@ class Dockerator:
             return p
         else:
             raise ValueError(
-                f"Error parsing {self.dockerator.python_version} to major version"
+                f"Error parsing {self.anysnake.python_version} to major version"
             )
 
     def annotate_packages(self, parsed_packages):

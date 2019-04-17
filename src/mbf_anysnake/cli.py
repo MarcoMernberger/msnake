@@ -4,7 +4,7 @@ import click_completion
 click_completion.init()
 
 from pathlib import Path
-from mbf_anysnake import parse_requirements, parsed_to_dockerator
+from mbf_anysnake import parse_requirements, parsed_to_anysnake
 import subprocess
 
 
@@ -21,9 +21,9 @@ def main():
     pass
 
 
-def get_dockerator():
+def get_anysnake():
     parsed = parse_requirements(config_file)
-    return parsed_to_dockerator(parsed), parsed
+    return parsed_to_anysnake(parsed), parsed
 
 
 def get_next_free_port(start_at):
@@ -59,7 +59,7 @@ def get_volumes_config(config, key2):
 @click.option("--do-time", default=False, is_flag=True)
 def build(do_time=False):
     """Build everything if necessary - from docker to local venv from project.setup"""
-    d, _ = get_dockerator()
+    d, _ = get_anysnake()
     d.ensure(do_time)
     return d
 
@@ -70,7 +70,7 @@ def rebuild(modules=[]):
     """for each locally cloned package in code,
     call python setup.py install
     """
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     d.rebuild(modules)
 
 
@@ -82,7 +82,7 @@ def remove_pip(packages):
     If they're editable, remove their code/folders as well"""
     import shutil
     import tomlkit
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     local_config = tomlkit.loads(Path('anysnake.toml').read_text())
     write_toml=False
     for p in packages:
@@ -122,7 +122,7 @@ def rebuild_global_venv():
 def shell(no_build=False, allow_writes=False, include_perf=False):
     """Run a shell with everything mapped (build if necessary)"""
     import os
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     if not no_build:
         d.ensure()
     else:
@@ -147,7 +147,7 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
 @click.argument("cmd", nargs=-1)
 def run(cmd, no_build=False):
     """Run a command"""
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     if not no_build:
         d.ensure()
     else:
@@ -176,7 +176,7 @@ def run(cmd, no_build=False):
 def jupyter(no_build=False):
     """Run a jupyter with everything mapped (build if necessary)"""
 
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     if not no_build:
         d.ensure()
     else:
@@ -201,7 +201,7 @@ def test(modules, report_only):
     """Run pytest on all (or a subset) modules that were in the code path and had a tests/conftest.py"""
     from . import testing
 
-    d, config = get_dockerator()
+    d, config = get_anysnake()
     d.ensure()
     testing.run_tests(modules, d, config, report_only)
 
@@ -209,7 +209,7 @@ def test(modules, report_only):
 @main.command()
 def show_config():
     """Print the config as it is actually used"""
-    d, parsed = get_dockerator()
+    d, parsed = get_anysnake()
     d.pprint()
     print("")
     print("Additional volumes")
@@ -226,7 +226,7 @@ def show_config():
 @main.command()
 def show_paths():
     """Print the config as it is actually used"""
-    d, parsed = get_dockerator()
+    d, parsed = get_anysnake()
     import pprint
 
     print("paths detected")
@@ -315,7 +315,7 @@ def freeze():
     """Output installed packages in anysnake.toml format"""
     import tomlkit
 
-    d, parsed = get_dockerator()
+    d, parsed = get_anysnake()
     output = {}
     for s in d.strategies:
         if hasattr(s, "freeze"):

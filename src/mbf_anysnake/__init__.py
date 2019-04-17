@@ -1,5 +1,5 @@
-from .dockerator import Dockerator
-from .parser import parse_requirements, parsed_to_dockerator
+from .anysnake import Anysnake
+from .parser import parse_requirements, parsed_to_anysnake
 
 from pkg_resources import get_distribution, DistributionNotFound
 try:
@@ -8,4 +8,4 @@ except DistributionNotFound:
     # package is not installed
     pass
 
-__all__ = [Dockerator, parse_requirements, parsed_to_dockerator, __version__]
+__all__ = [Anysnake, parse_requirements, parsed_to_anysnake, __version__]
