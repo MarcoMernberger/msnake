@@ -8,6 +8,7 @@ import packaging.version
 import pkg_resources
 from pathlib import Path
 from .util import combine_volumes, find_storage_path_from_other_machine
+import tomlkit
 
 
 class DockFill_Python:
@@ -260,52 +261,62 @@ class _DockerFillVenv:
             and (target_path / "src" / "lib.rs").exists()
         )
 
-    def install_pip_packages(self, packages, code_packages, extra_reqs):
-        """packages are parse_requirements results with method == 'pip'"""
-        pkg_string = []
-        further_cmds = []
-        further_pkgs = []
-        print("code_packages")
-        for k, v in packages.items():
-            if (
-                k in code_packages or safe_name(k) in code_packages
-            ):  # these late in correct order
-                pass
-            else:
-                pkg_string.append('"%s%s"' % (k, v))
-        needs_pyo3_pack = False
-        code_pkg_string = []
-        for k in code_packages:
-            if self.is_pyo3_package(k):
-                further_cmds.append(
-                    f"cd /project/code/{k} && pyo3-pack develop --release"
-                )
-                needs_pyo3_pack = True
-                further_pkgs.append(k)
-            else:
-                code_pkg_string.append(f'-e "/project/code/{k}" \\\n')
-        for k, extra in extra_reqs:
-            code_pkg_string.append(f'-e "/project/code/{k}[{extra}]" \\\n')
-        if code_pkg_string:
-            pkg_string.append(" --no-deps \\\n" + " ".join(code_pkg_string))
-            further_cmds.insert(0, f"pip install {' '.join(code_pkg_string)}")
+    def is_pep517_package(self, editable_name):
+        target_path = self.clone_path / editable_name / "pyproject.toml"
+        return target_path.exists()
 
-        pkg_string = " ".join(pkg_string)
-        if pkg_string:
-            print(f"\tpip install {pkg_string}")
-            pip_cmd = f"pip install {pkg_string}"
-        else:
-            pip_cmd = "true"
-        if further_cmds:
-            if needs_pyo3_pack:
-                further_cmds.insert(0, f"pip install pyo3-pack")
-                further_cmds.insert(
-                    1, f"export VIRTUAL_ENV={self.target_path_inside_docker}"
+    def is_pep517_but_setuptools(self, editable_name):
+        target_path = self.clone_path / editable_name / "pyproject.toml"
+        if not target_path.exists():
+            return False
+        return "setuptools" in target_path.read_text()
+
+    def install_pip_packages(
+        self, packages, editable_packages, packages_to_install_extra_reqs_from
+    ):
+        """packages are parse_requirements results with method == 'pip'"""
+        # this is a horrible mess of cludgy hacks to work around limitations in
+        # pip
+        # such as 'no sensible dependency resolution for editable insstlls'
+        # 'no editable installs for pep517 packages'
+        step_a = []
+        step_b = []
+        step_c = []
+
+        # step a - install editable packages without dependencies and non-editable
+        # to circumvent pep517 limitations
+        # step b - pip install (without -e) everything
+        # step c - unistall editable packages and reinstall with python setup.py
+        # develop
+        pip_cmd = []
+        for k, v in packages.items():
+            if k not in editable_packages and safe_name(k) not in editable_packages:
+                pip_cmd.append(f'"{k}{v}"')
+            else:
+                if not self.is_pyo3_package(k):
+                    step_a.append(f"pip install /project/code/{k} --no-deps")
+                else:
+                    if self.anysnake.dockfill_rust is None:
+                        raise ValueError(f"pyo3 package {k} but no Rust definied")
+
+                pip_cmd.append(f"/project/code/{k}")
+        step_b.append(("pip install --disable-pip-version-check \\\n" + "\n".join(["  " + x + " \\" for x in pip_cmd]))[:-2])
+
+        for k in editable_packages:
+            if self.is_pyo3_package(k):
+                step_c.append(f"cd /project/code/{k} && pyo3-pack develop --release")
+            elif not self.is_pep517_package(k) or self.is_pep517_but_setuptools(k):
+                #step_c.append(f"pip uninstall {k}")
+                #step_c.append(f"cd /project/code/{k} && python setup.py develop")
+                step_c.append(f"pip install -e /project/code/{k} --no-use-pep517")
+            else:
+                raise ValueError(
+                    f"package {k} was pep517 but not setuptools"
+                    " - you will need to take care of that case"
                 )
-            further_cmds = "&&\\\n".join(further_cmds)
-            print(f"non-pip install {further_pkgs}")
-        else:
-            further_cmds = ""
+        for k in packages_to_install_extra_reqs_from:
+            step_c.append(f'pip install "/project/code/{k}[{extra}]"')
+
         volumes_ro = self.dockfill_python.volumes.copy()
         volumes_rw = {
             self.target_path: self.target_path_inside_docker,
@@ -326,25 +337,23 @@ class _DockerFillVenv:
             if p.exists():
                 volumes_ro[str(p)] = str(Path(home_inside_docker) / h)
 
-        if needs_pyo3_pack:
-            if self.anysnake.dockfill_rust is None:
-                raise ValueError("pyo3 package but no Rust definied")
+            
         env["EXTPATH"] = ":".join(paths)
         # /anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
+        cmd = "\n".join(step_a + step_b + step_c)
 
         return_code, logs = self.anysnake._run_docker(
             f"""
 #!/bin/bash
     export PATH=$PATH:$EXTPATH
-    echo $PATH
-    echo {pip_cmd}
-    if {pip_cmd}; then 
-        echo {further_cmds}
-        {further_cmds}
-    else
-        exit $?;
-    fi
-
+    echo "Path: $PATH"
+    echo "pip cmd:"
+    echo <<EOF
+{cmd}
+EOF
+{cmd}
+    echo "done"
+  
     """,
             {
                 "volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw),
