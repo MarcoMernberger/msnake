@@ -222,10 +222,10 @@ class Anysnake:
         for h in home_files:
             p = Path("~").expanduser() / h
             if p.exists():
-                if p.is_dir():
-                    rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
-                else:
-                    ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+                #if p.is_dir():
+                    #rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+                #else:
+                ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
         for h in home_dirs:
             p = Path("~").expanduser() / h
             if p.exists() and not p.is_dir():

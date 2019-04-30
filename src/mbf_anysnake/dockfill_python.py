@@ -28,9 +28,7 @@ class DockFill_Python:
             }
         )
         self.volumes = {
-            anysnake.paths["storage_python"]: anysnake.paths[
-                "docker_storage_python"
-            ]
+            anysnake.paths["storage_python"]: anysnake.paths["docker_storage_python"]
         }
 
     def pprint(self):
@@ -49,11 +47,11 @@ class DockFill_Python:
             or (python_version >= "2.7.13")
         ):
             # ssl_lib = "libssl-dev"
-            ssl_lib=None
+            ssl_lib = None
             ssl_cmd = ""
             pass
         else:
-            #raise ValueError("Find a fix for old ssl lib")
+            # raise ValueError("Find a fix for old ssl lib")
             ssl_lib = "libssl1.0-dev"
             ssl_cmd = f"sudo apt-get install -y {ssl_lib}"
 
@@ -116,22 +114,6 @@ class MiniNode:
         other_node.dependants.add(self)
 
 
-def apply_topological_order(nodes):
-    for n in nodes:
-        n.dependants_copy = n.dependants.copy()
-    L = []
-    S = [job for job in nodes if len(job.dependants_copy) == 0]
-    S.sort(key=lambda job: job.prio if hasattr(job, "prio") else 0)
-    while S:
-        n = S.pop()
-        L.append(n)
-        for m in n.prerequisites:
-            m.dependants_copy.remove(n)
-            if not m.dependants_copy:
-                S.append(m)
-    return L
-
-
 class _DockerFillVenv:
     def __init__(self):
         self.paths.update(
@@ -183,33 +165,6 @@ class _DockerFillVenv:
                 or (k in code_names and k in had_to_clone)
             }
         extra_reqs = []
-        had_to_clone_nodes = {safe_name(c): MiniNode(c) for c in had_to_clone}
-        for c in had_to_clone:
-            cfg_file = Path(self.paths["code"] / c / "setup.cfg")
-            if cfg_file.exists():
-                import configparser
-
-                parser = configparser.ConfigParser()
-                cfg = parser.read(str(cfg_file))
-                try:
-                    parser["options.extras_require"]["testing"]
-                    extra_reqs.append((c, "testing"))
-                except KeyError:
-                    pass
-                try:
-                    needs = parser["options"]["install_requires"]
-                    needs = re.split("\n|;", needs)
-                    needs = [safe_name(x.strip()) for x in needs if x.strip()]
-                    needs = set(needs).intersection(had_to_clone_nodes)
-                    print(c, needs)
-                    for dep in needs:
-                        had_to_clone_nodes[safe_name(c)].depends_on(
-                            had_to_clone_nodes[safe_name(dep)]
-                        )
-                except KeyError:
-                    pass
-        had_to_clone_nodes = apply_topological_order(had_to_clone_nodes.values())
-        had_to_clone = [node.unsafe_name for node in had_to_clone_nodes[::-1]]
         if to_install:
             self.install_pip_packages(to_install, had_to_clone, extra_reqs)
             return True
@@ -244,17 +199,30 @@ class _DockerFillVenv:
                             "Could not parse url / must be git+http(s) / hg+https, or github path"
                         )
                     if method == "git":
-                        subprocess.check_call(
-                            ["git", "clone", url, str(target_path)],
-                            stdout=log_file,
-                            stderr=log_file,
-                        )
+                        try:
+                            subprocess.check_call(
+                                ["git", "clone", url, str(target_path)],
+                                stdout=log_file,
+                                stderr=log_file,
+                            )
+                        except subprocess.CalledProcessError:
+                            import shutil
+
+                            shutil.rmtree(target_path)
+                            raise
                     elif method == "hg":
-                        subprocess.check_call(
-                            ["hg", "clone", url, str(target_path)],
-                            stdout=log_file,
-                            stderr=log_file,
-                        )
+                        try:
+                            subprocess.check_call(
+                                ["hg", "clone", url, str(target_path)],
+                                stdout=log_file,
+                                stderr=log_file,
+                            )
+                        except subprocess.CalledProcessError:
+                            import shutil
+
+                            shutil.rmtree(target_path)
+                            raise
+
         return result
 
     def find_installed_packages(self, major_python_version):
@@ -277,9 +245,9 @@ class _DockerFillVenv:
                 name = p.name[: -1 * len(".egg-link")]
                 version = "unknown"
                 result[safe_name(name)] = version
-            elif p.name.endswith('.so'):
-                name = p.name[:p.name.find('.')]
-                version = 'unknown'
+            elif p.name.endswith(".so"):
+                name = p.name[: p.name.find(".")]
+                version = "unknown"
                 result[safe_name(name)] = version
 
         return result
@@ -297,6 +265,7 @@ class _DockerFillVenv:
         pkg_string = []
         further_cmds = []
         further_pkgs = []
+        print("code_packages")
         for k, v in packages.items():
             if (
                 k in code_packages or safe_name(k) in code_packages
@@ -305,6 +274,7 @@ class _DockerFillVenv:
             else:
                 pkg_string.append('"%s%s"' % (k, v))
         needs_pyo3_pack = False
+        code_pkg_string = []
         for k in code_packages:
             if self.is_pyo3_package(k):
                 further_cmds.append(
@@ -313,9 +283,12 @@ class _DockerFillVenv:
                 needs_pyo3_pack = True
                 further_pkgs.append(k)
             else:
-                pkg_string.append(f'-e "/project/code/{k}"')
+                code_pkg_string.append(f'-e "/project/code/{k}" \\\n')
         for k, extra in extra_reqs:
-            pkg_string.append(f"-e /project/code/{k}[{extra}]")
+            code_pkg_string.append(f'-e "/project/code/{k}[{extra}]" \\\n')
+        if code_pkg_string:
+            pkg_string.append(" --no-deps \\\n" + " ".join(code_pkg_string))
+            further_cmds.insert(0, f"pip install {' '.join(code_pkg_string)}")
 
         pkg_string = " ".join(pkg_string)
         if pkg_string:
@@ -325,9 +298,7 @@ class _DockerFillVenv:
             pip_cmd = "true"
         if further_cmds:
             if needs_pyo3_pack:
-                further_cmds.insert(
-                    0, f"pip install pyo3-pack"
-                )
+                further_cmds.insert(0, f"pip install pyo3-pack")
                 further_cmds.insert(
                     1, f"export VIRTUAL_ENV={self.target_path_inside_docker}"
                 )
@@ -337,21 +308,29 @@ class _DockerFillVenv:
             further_cmds = ""
         volumes_ro = self.dockfill_python.volumes.copy()
         volumes_rw = {
-                self.target_path: self.target_path_inside_docker,
-                self.clone_path: self.clone_path_inside_docker,
-            }
+            self.target_path: self.target_path_inside_docker,
+            self.clone_path: self.clone_path_inside_docker,
+        }
         env = {}
         paths = [self.target_path_inside_docker + "/bin"]
-        if self.anysnake.dockfill_rust is not None: # if we have a rust, use it
+        if self.anysnake.dockfill_rust is not None:  # if we have a rust, use it
             volumes_ro.update(self.anysnake.dockfill_rust.volumes)
             volumes_rw.update(self.anysnake.dockfill_rust.rw_volumes)
             paths.append(self.anysnake.dockfill_rust.shell_path)
             env.update(self.anysnake.dockfill_rust.env)
+        from .cli import home_files
+
+        home_inside_docker = "/home/u%i" % os.getuid()
+        for h in home_files:
+            p = Path("~").expanduser() / h
+            if p.exists():
+                volumes_ro[str(p)] = str(Path(home_inside_docker) / h)
+
         if needs_pyo3_pack:
             if self.anysnake.dockfill_rust is None:
                 raise ValueError("pyo3 package but no Rust definied")
-        env['EXTPATH'] = ":".join(paths)
-#/anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
+        env["EXTPATH"] = ":".join(paths)
+        # /anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
 
         return_code, logs = self.anysnake._run_docker(
             f"""
@@ -367,12 +346,13 @@ class _DockerFillVenv:
     fi
 
     """,
-            {"volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw), "environment": env},
+            {
+                "volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw),
+                "environment": env,
+            },
             f"log_{self.name}_venv_pip",
         )
-        installed_now = self.find_installed_packages(
-            self.anysnake.major_python_version
-        )
+        installed_now = self.find_installed_packages(self.anysnake.major_python_version)
         still_missing = set([safe_name(k) for k in packages.keys()]).difference(
             [safe_name(k) for k in installed_now]
         )
@@ -531,7 +511,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
             print(f"    {entry}")
 
     def create_venv(self):
-       
+
         additional_volumes = self.dockfill_python.volumes.copy()
 
         self.anysnake.build(
@@ -559,18 +539,24 @@ echo "done"
             / "lib"
             / ("python" + self.anysnake.major_python_version)
         )
-        if 'docker_storage_rpy2' in self.paths:
-            lib_rpy2 = (Path(self.paths["docker_storage_rpy2"])
-            / "lib"
-            / ("python" + self.anysnake.major_python_version)
-                        )
+        if "docker_storage_rpy2" in self.paths:
+            lib_rpy2 = (
+                Path(self.paths["docker_storage_rpy2"])
+                / "lib"
+                / ("python" + self.anysnake.major_python_version)
+            )
             rpy2_venv_str = f"'{lib_rpy2}/site-packages',"
         else:
-            rpy2_venv_str = ''
-        sc_file = str(self.paths['code_venv']  / "lib"
-            / ("python" + self.anysnake.major_python_version) / "site-packages" / "sitecustomize.py")
+            rpy2_venv_str = ""
+        sc_file = str(
+            self.paths["code_venv"]
+            / "lib"
+            / ("python" + self.anysnake.major_python_version)
+            / "site-packages"
+            / "sitecustomize.py"
+        )
 
-        tf = open(sc_file, 'w')
+        tf = open(sc_file, "w")
         tf.write(
             f"""
 import sys
