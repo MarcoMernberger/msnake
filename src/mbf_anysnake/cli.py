@@ -235,13 +235,10 @@ def show_paths():
 
 @main.command()
 def default_config():
-    """Write an anysnake.toml if none is present"""
+    """Print a default config"""
     p = Path("anysnake.toml")
-    if p.exists():
-        print("Not overwriting existing anysnake.toml")
-    else:
-        p.write_text(
-            """[base]
+    print(
+    """[base]
 # optional global config to import
 #global_config="/etc/anysnake.tompl"
 # python version to use
@@ -289,8 +286,6 @@ INSIDE_ANYSNAKE="yes"
 
 """
         )
-
-        print("Written default anysnake.toml")
 
 
 def merge_dicts(a, b, path=None):
