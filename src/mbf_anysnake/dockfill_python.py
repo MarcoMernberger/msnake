@@ -271,6 +271,18 @@ class _DockerFillVenv:
             return False
         return "setuptools" in target_path.read_text()
 
+    def get_extras(self, editable_name):
+        import configparser
+        target_path = self.clone_path / editable_name / "setup.cfg"
+        if target_path.exists():
+            c = configparser.ConfigParser()
+            c.read([str(target_path)])
+            try:
+                return c.options('options.extras_require')
+            except configparser.Error:
+                pass
+        return []
+
     def install_pip_packages(
         self, packages, editable_packages, packages_to_install_extra_reqs_from
     ):
@@ -314,6 +326,9 @@ class _DockerFillVenv:
                     f"package {k} was pep517 but not setuptools"
                     " - you will need to take care of that case"
                 )
+            if 'testing' in self.get_extras(k):
+                step_c.append(f"pip install -e /project/code/{k}[testing] --no-use-pep517")
+
         for k in packages_to_install_extra_reqs_from:
             step_c.append(f'pip install "/project/code/{k}[{extra}]"')
 

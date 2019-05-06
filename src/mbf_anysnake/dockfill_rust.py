@@ -89,7 +89,6 @@ class DockFill_Rust:
     def get_installed_rust_versions(self):
         result = set()
         p = self.paths["storage_rustup"] / "anysnake"
-        print(p)
         if p.exists():
             for d in p.glob("*.done"):
                 v = d.name[:-5]
