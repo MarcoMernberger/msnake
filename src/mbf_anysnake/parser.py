@@ -137,7 +137,10 @@ def check_pip_definitions(defs, pip_lookup_regexps):
     for k, v in defs.items():
         for rex, replacement in pip_lookup_regexps:
             if re.match(rex,v):
-                defs[k] = re.sub(rex, replacement, v)
+                if isinstance(replacement, str):
+                    defs[k] = re.sub(rex, replacement, v)
+                else:
+                    defs[k] = replacement[0].replace('\\1', k)
 
     for k, v in defs.items():
         if not re.match(

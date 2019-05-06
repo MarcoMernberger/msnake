@@ -129,6 +129,12 @@ For an editable libray: ``dppd="@git+https://github.com/TyberiusPrime/dppd"``
 Regeps->substitution to apply to pip-versions. This allows you to to extend 
 beyond the @gh (see 'python' above) automatic.
 
+You can either specify a replacement string (use \\1 to place captured regexps groups),
+or a list, in which case simply \\1 will be replaced with the name ot the left
+hand side of the = sign.
+
+Replacements must be full specifications, including the @.
+
 
 [env]
 ------
