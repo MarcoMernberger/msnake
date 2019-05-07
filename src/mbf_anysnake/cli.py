@@ -65,13 +65,12 @@ def build(do_time=False):
 
 
 @main.command()
-@click.argument("modules", nargs=-1)
-def rebuild(modules=[]):
+def rebuild():
     """for each locally cloned package in code,
     call python setup.py install
     """
     d, config = get_anysnake()
-    d.rebuild(modules)
+    d.rebuild()
 
 
 @main.command()
@@ -243,6 +242,8 @@ def default_config():
 #global_config="/etc/anysnake.tompl"
 # python version to use
 python="3.7.2"
+#project_name = folder name of anysnake.toml by default, overwrite here
+#project_name="example"
 
 #bioconductor version to use, R version and CRAN dates are derived from this
 # (optional) 

@@ -58,3 +58,16 @@ def download_file(url, filename):
         shutil.move(str(filename) + "_temp", str(filename))
         stop = time.time()
         print("Rate: %.2f MB/s" % ((count / 1024 / 1024 / (stop - start))))
+
+
+def dict_to_toml(d):
+    import tomlkit
+
+    toml = tomlkit.document()
+    toml.add(tomlkit.comment("Autogenertod by anysnake"))
+    for key, sub_d in d.items():
+        table = tomlkit.table()
+        for k, v in sub_d.items():
+            table.add(k, v)
+        toml.add(key, table)
+    return toml

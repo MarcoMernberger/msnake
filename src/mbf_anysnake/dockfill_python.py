@@ -7,7 +7,7 @@ import subprocess
 import packaging.version
 import pkg_resources
 from pathlib import Path
-from .util import combine_volumes, find_storage_path_from_other_machine
+from .util import combine_volumes, find_storage_path_from_other_machine, dict_to_toml
 import tomlkit
 
 
@@ -103,29 +103,95 @@ def safe_name(name):
     return pkg_resources.safe_name(name).lower()
 
 
-class MiniNode:
-    def __init__(self, name):
-        self.name = safe_name(name)
-        self.unsafe_name = name
-        self.prerequisites = set()
-        self.dependants = set()
+class _Dockfill_Venv_Base:
+    def create_venv(self):
+        return self.anysnake.build(
+            target_dir=self.target_path,
+            target_dir_inside_docker=self.target_path_inside_docker,
+            relative_check_filename=Path("bin") / "activate.fish",
+            log_name=f"log_{self.name}_venv",
+            additional_volumes=self.dockfill_python.volumes,
+            build_cmds=f"""
+{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
+echo "done"
+""",
+        )
 
-    def depends_on(self, other_node):
-        self.prerequisites.add(other_node)
-        other_node.dependants.add(self)
+
+class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
+    def __init__(self, anysnake, dockfill_python):
+        self.anysnake = anysnake
+        self.paths = self.anysnake.paths
+        self.python_version = self.anysnake.python_version
+        self.dockfill_python = dockfill_python
+        self.name = "python_poetry"
+        self.paths.update(
+            {
+                "poetry_venv": (
+                    self.paths["storage"] / "poetry_venv" / self.python_version
+                ),
+                "docker_poetry_venv": "/anysnake/poetry_venv",
+                "log_python_poetry_venv": self.paths["log_storage"]
+                / f"anysnake.poetry_venv.{self.python_version}.log",
+            }
+        )
+        self.target_path = self.paths["poetry_venv"]
+        self.target_path_inside_docker = self.paths["docker_poetry_venv"]
+        self.volumes = {}
+
+    def ensure(self):
+        res = self.create_venv()
+        res |= self.install_poetry()
+        return res
+
+    def install_poetry(self):
+        poetry_bin = Path(self.target_path / "bin" / "poetry")
+        if not poetry_bin.exists():
+            print("install poetry")
+            volumes_ro = self.dockfill_python.volumes.copy()
+            volumes_rw = {self.target_path: self.target_path_inside_docker}
+            env = {}
+            paths = [self.target_path_inside_docker + "/bin"]
+
+            env["EXTPATH"] = ":".join(paths)
+            cmd = "pip install poetry"
+            return_code, logs = self.anysnake._run_docker(
+                f"""
+    #!/bin/bash
+        export PATH=$PATH:$EXTPATH
+    {cmd}
+        echo "done"
+    
+        """,
+                {
+                    "volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw),
+                    "environment": env,
+                },
+                f"log_python_poetry_venv",
+                append_to_log=True,
+            )
+            return True  # please run post_build_cmd
+        return False
 
 
-class _DockerFillVenv:
+class _DockerFillVenv(_Dockfill_Venv_Base):
     def __init__(self):
         self.paths.update(
             {
                 f"log_{self.name}_venv": (
                     self.log_path / f"anysnake.{self.name}_venv.log"
                 ),
-                f"log_{self.name}_venv_pip": (
-                    self.log_path / f"anysnake.{self.name}_venv_pip.log"
+                f"log_{self.name}_venv_poetry": (
+                    self.log_path / f"anysnake.{self.name}_venv_poetry.log"
+                ),
+                f"log_{self.name}_venv_poetry_cmd": (
+                    self.log_path / f"anysnake.{self.name}_venv_poetry_cmd.log"
                 ),
             }
+        )
+        self.poetry_path = self.clone_path / "poetry"
+        self.poetry_path_inside_docker = str(
+            Path(self.clone_path_inside_docker) / "poetry"
         )
 
     def ensure(self):
@@ -134,6 +200,7 @@ class _DockerFillVenv:
         return res
 
     def fill_venv(self, rebuild=False):
+        print("fill_venv", self.name)
         code_packages = {
             k: v
             for (k, v) in self.packages.items()
@@ -143,33 +210,16 @@ class _DockerFillVenv:
             and re.match(re_github, v[1:])  # github
         }
         code_names = set(code_packages.keys())
-        had_to_clone = self.clone_code_packages(code_packages)
+        self.clone_code_packages(code_packages)
         if rebuild:
-            to_install = self.packages
-            had_to_clone = code_names
-        else:
-            installed_versions = self.find_installed_package_versions(
-                self.anysnake.major_python_version
-            )
-            for c in code_names:
-                if safe_name(c) not in installed_versions:
-                    had_to_clone.add(c)
-            to_install = {
-                k: v
-                for (k, v) in self.packages.items()
-                if (
-                    k not in code_names
-                    and not version_is_compatible(
-                        v, installed_versions.get(safe_name(k), "")
-                    )
-                )
-                or (k in code_names and k in had_to_clone)
-            }
-        extra_reqs = []
-        if to_install:
-            self.install_pip_packages(to_install, had_to_clone, extra_reqs)
-            return True
-        return False
+            # force rebuild
+            if Path(self.poetry_path / "pyproject.toml").exists():
+                Path(self.poetry_path / "pyproject.toml").unlink()
+        packages_missing = bool(
+            set(self.packages)
+            - set(self.find_installed_packages(self.anysnake.major_python_version))
+        )
+        return self.install_with_poetry(self.packages, code_packages, packages_missing)
 
     def clone_code_packages(self, code_packages):
         result = set()
@@ -253,146 +303,107 @@ class _DockerFillVenv:
 
         return result
 
-    def is_pyo3_package(self, code_package_name):
-        target_path = self.clone_path / code_package_name
-        return (
-            not (target_path / "setup.py").exists()
-            and (target_path / "Cargo.toml").exists()
-            and (target_path / "src" / "lib.rs").exists()
-        )
+    def install_with_poetry(self, packages, editable_packages, packages_missing):
+        """packages are parse_requirements results with method == 'pip'
+        we now use poetry for this
+        
+        """
+        toml = f"""
+[tool.poetry]
+    name = "{self.anysnake.project_name}"
+    version = "0.1.0"
+    description = ""
+    authors = []
 
-    def is_pep517_package(self, editable_name):
-        target_path = self.clone_path / editable_name / "pyproject.toml"
-        return target_path.exists()
+[build-system"]
+    requires =  ["poetry>=0.12"]
+    build-backend = "poetry.masonry.api"
 
-    def is_pep517_but_setuptools(self, editable_name):
-        target_path = self.clone_path / editable_name / "pyproject.toml"
-        if not target_path.exists():
-            return False
-        return "setuptools" in target_path.read_text()
-
-    def get_extras(self, editable_name):
-        import configparser
-        target_path = self.clone_path / editable_name / "setup.cfg"
-        if target_path.exists():
-            c = configparser.ConfigParser()
-            c.read([str(target_path)])
-            try:
-                return c.options('options.extras_require')
-            except configparser.Error:
-                pass
-        return []
-
-    def install_pip_packages(
-        self, packages, editable_packages, packages_to_install_extra_reqs_from
-    ):
-        """packages are parse_requirements results with method == 'pip'"""
-        # this is a horrible mess of cludgy hacks to work around limitations in
-        # pip
-        # such as 'no sensible dependency resolution for editable insstlls'
-        # 'no editable installs for pep517 packages'
-        step_a = []
-        step_b = []
-        step_c = []
-
-        # step a - install editable packages without dependencies and non-editable
-        # to circumvent pep517 limitations
-        # step b - pip install (without -e) everything
-        # step c - unistall editable packages and reinstall with python setup.py
-        # develop
-        pip_cmd = []
-        for k, v in packages.items():
+[tool.poetry.dependencies]
+    python = "{self.anysnake.python_version}"
+"""
+        for k, v in sorted(packages.items()):
             if k not in editable_packages and safe_name(k) not in editable_packages:
-                pip_cmd.append(f'"{k}{v}"')
+                toml += f'{k} = "{v}"\n'
             else:
-                if not self.is_pyo3_package(k):
-                    step_a.append(f"pip install /project/code/{k} --no-deps")
-                else:
-                    if self.anysnake.dockfill_rust is None:
-                        raise ValueError(f"pyo3 package {k} but no Rust definied")
-
-                pip_cmd.append(f"/project/code/{k}")
-        step_b.append(("pip install --disable-pip-version-check \\\n" + "\n".join(["  " + x + " \\" for x in pip_cmd]))[:-2])
-
-        for k in editable_packages:
-            if self.is_pyo3_package(k):
-                step_c.append(f"cd /project/code/{k} && pyo3-pack develop --release")
-            elif not self.is_pep517_package(k) or self.is_pep517_but_setuptools(k):
-                #step_c.append(f"pip uninstall {k}")
-                #step_c.append(f"cd /project/code/{k} && python setup.py develop")
-                step_c.append(f"pip install -e /project/code/{k} --no-use-pep517")
-            else:
-                raise ValueError(
-                    f"package {k} was pep517 but not setuptools"
-                    " - you will need to take care of that case"
-                )
-            if 'testing' in self.get_extras(k):
-                step_c.append(f"pip install -e /project/code/{k}[testing] --no-use-pep517")
-
-        for k in packages_to_install_extra_reqs_from:
-            step_c.append(f'pip install "/project/code/{k}[{extra}]"')
-
-        volumes_ro = self.dockfill_python.volumes.copy()
-        volumes_rw = {
-            self.target_path: self.target_path_inside_docker,
-            self.clone_path: self.clone_path_inside_docker,
-        }
-        env = {}
-        paths = [self.target_path_inside_docker + "/bin"]
-        if self.anysnake.dockfill_rust is not None:  # if we have a rust, use it
-            volumes_ro.update(self.anysnake.dockfill_rust.volumes)
-            volumes_rw.update(self.anysnake.dockfill_rust.rw_volumes)
-            paths.append(self.anysnake.dockfill_rust.shell_path)
-            env.update(self.anysnake.dockfill_rust.env)
-        from .cli import home_files
-
-        home_inside_docker = "/home/u%i" % os.getuid()
-        for h in home_files:
-            p = Path("~").expanduser() / h
-            if p.exists():
-                volumes_ro[str(p)] = str(Path(home_inside_docker) / h)
-
-            
-        env["EXTPATH"] = ":".join(paths)
-        # /anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
-        cmd = "\n".join(step_a + step_b + step_c)
-
-        return_code, logs = self.anysnake._run_docker(
-            f"""
-#!/bin/bash
-    export PATH=$PATH:$EXTPATH
-    echo "Path: $PATH"
-    echo "pip cmd:"
-    echo <<EOF
-{cmd}
-EOF
-{cmd}
-    echo "done"
-  
-    """,
-            {
-                "volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw),
-                "environment": env,
-            },
-            f"log_{self.name}_venv_pip",
-        )
-        installed_now = self.find_installed_packages(self.anysnake.major_python_version)
-        still_missing = set([safe_name(k) for k in packages.keys()]).difference(
-            [safe_name(k) for k in installed_now]
-        )
-        if still_missing:
-            msg = f"Installation of packages failed: {still_missing}\n"
-        elif (isinstance(return_code, int) and (return_code != 0)) or (
-            not isinstance(return_code, int) and (return_code["StatusCode"] != 0)
-        ):
-            msg = f"Installation of packages failed: return code was not 0 (was {return_code})\n"
+                toml += f'{k} = {{path = "/project/code/{k}"}}\n'
+        new_toml = toml
+        pyproject_toml = Path(self.poetry_path / "pyproject.toml")
+        pyproject_toml.parent.mkdir(exist_ok=True)
+        if pyproject_toml.exists():
+            old_toml = pyproject_toml.read_text()
         else:
-            msg = ""
-        if msg:
-            print(self.paths[f"log_{self.name}_venv_pip"].read_text())
-            raise ValueError(
-                msg + "Check log in " + str(self.paths[f"log_{self.name}_venv_pip"])
+            old_toml = ""
+        if new_toml != old_toml or packages_missing:
+            print(f"poetry for {self.name} (slow, stand by)")
+            pyproject_toml.write_text(new_toml)
+            cmd = [
+                f"source {self.target_path_inside_docker}/bin/activate",
+                f"cd {self.poetry_path_inside_docker} && {self.paths['docker_poetry_venv']}/bin/poetry update",
+            ]
+            cmd = "\n".join(cmd)
+            volumes_ro = self.dockfill_python.volumes.copy()
+            volumes_rw = {
+                self.target_path: self.target_path_inside_docker,
+                self.clone_path: self.clone_path_inside_docker,
+                self.paths["poetry_venv"]: self.paths["docker_poetry_venv"],
+            }
+            env = {}
+            paths = [self.target_path_inside_docker + "/bin"]
+            if self.anysnake.dockfill_rust is not None:  # if we have a rust, use it
+                volumes_ro.update(self.anysnake.dockfill_rust.volumes)
+                volumes_rw.update(self.anysnake.dockfill_rust.rw_volumes)
+                paths.append(self.anysnake.dockfill_rust.shell_path)
+                env.update(self.anysnake.dockfill_rust.env)
+            from .cli import home_files
+
+            home_inside_docker = "/home/u%i" % os.getuid()
+            for h in home_files:
+                p = Path("~").expanduser() / h
+                if p.exists():
+                    volumes_ro[str(p)] = str(Path(home_inside_docker) / h)
+
+            env["EXTPATH"] = ":".join(paths)
+            # /anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient
+            return_code, logs = self.anysnake._run_docker(
+                f"""
+    #!/bin/bash
+        export PATH=$PATH:$EXTPATH
+        echo "Path: $PATH"
+    {cmd}
+        echo "done"
+    
+        """,
+                {
+                    "volumes": combine_volumes(ro=volumes_ro, rw=volumes_rw),
+                    "environment": env,
+                },
+                f"log_{self.name}_venv_poetry",
             )
+            installed_now = self.find_installed_packages(
+                self.anysnake.major_python_version
+            )
+            still_missing = set([safe_name(k) for k in packages.keys()]).difference(
+                [safe_name(k) for k in installed_now]
+            )
+            if still_missing:
+                msg = f"Installation of packages failed: {still_missing}\n"
+            elif (isinstance(return_code, int) and (return_code != 0)) or (
+                not isinstance(return_code, int) and (return_code["StatusCode"] != 0)
+            ):
+                msg = f"Installation of packages failed: return code was not 0 (was {return_code})\n"
+            else:
+                msg = ""
+            if msg:
+                print(self.paths[f"log_{self.name}_venv_poetry"].read_text())
+                raise ValueError(
+                    msg
+                    + "Check log in "
+                    + str(self.paths[f"log_{self.name}_venv_poetry"])
+                )
+            return True
+        else:
+            return False  # everything ok
 
 
 class DockFill_GlobalVenv(_DockerFillVenv):
@@ -428,19 +439,6 @@ class DockFill_GlobalVenv(_DockerFillVenv):
         print("  Global python packages")
         for entry in self.anysnake.global_python_packages.items():
             print(f"    {entry}")
-
-    def create_venv(self):
-        return self.anysnake.build(
-            target_dir=self.target_path,
-            target_dir_inside_docker=self.target_path_inside_docker,
-            relative_check_filename=Path("bin") / "activate.fish",
-            log_name=f"log_{self.name}_venv",
-            additional_volumes=self.dockfill_python.volumes,
-            build_cmds=f"""
-{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
-echo "done"
-""",
-        )
 
     def freeze(self):
         """Return a toml string with all the installed versions"""
@@ -534,23 +532,6 @@ class DockFill_CodeVenv(_DockerFillVenv):
         for entry in self.anysnake.local_python_packages.items():
             print(f"    {entry}")
 
-    def create_venv(self):
-
-        additional_volumes = self.dockfill_python.volumes.copy()
-
-        self.anysnake.build(
-            target_dir=self.target_path,
-            target_dir_inside_docker=self.target_path_inside_docker,
-            relative_check_filename=Path("bin") / "activate.fish",
-            log_name=f"log_{self.name}_venv",
-            additional_volumes=additional_volumes,
-            build_cmds=f"""
-ls {self.paths['docker_storage_python']}
-{self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
-echo "done"
-""",
-        )
-        return False
 
     def fill_sitecustomize(self):
         lib_code = (
@@ -616,50 +597,3 @@ for x in [
         ).items():
             result[k] = f"{v}"
         return {"python": result}
-
-
-def version_is_compatible(dep_def, version):
-    if version == "":  # not previously installed, I guess
-        return False
-    if dep_def == "":
-        return True
-    operators = ["<=", "<", "!=", "==", ">=", ">", "~=", "==="]
-    for o in operators:
-        if dep_def.startswith(o):
-            op = o
-            reqver = dep_def[len(op) :]
-            break
-    else:
-        raise ValueError("Could not understand dependency definition %s" % dep_def)
-    actual_ver = packaging.version.parse(version)
-    if "," in reqver:
-        raise NotImplementedError("Currently does not handle version>=x,<=y")
-    should_ver = packaging.version.parse(reqver)
-    if op == "<=":
-        return actual_ver <= should_ver
-    elif op == "<":
-        return actual_ver < should_ver
-    elif op == "!=":
-        return actual_ver != should_ver
-    elif op == "==":
-        return actual_ver == should_ver
-    elif op == ">=":
-        return actual_ver >= should_ver
-    elif op == ">":
-        return actual_ver > should_ver
-    elif op == "~=":
-        raise NotImplementedError(
-            "While ~= is undoubtedly useful, it's not implemented in anysnake yet"
-        )
-    elif op == "===":
-        return version == reqver
-    else:
-        raise NotImplementedError("forget to handle a case?", dep_def, version)
-
-
-def format_for_pip(parse_result):
-    res = parse_result["name"]
-    if parse_result["op"]:
-        res += parse_result["op"]
-        res += parse_result["version"]
-    return f'"{res}"'

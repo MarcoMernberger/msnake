@@ -12,7 +12,12 @@ import multiprocessing
 
 
 from .dockfill_docker import DockFill_Docker
-from .dockfill_python import DockFill_Python, DockFill_GlobalVenv, DockFill_CodeVenv
+from .dockfill_python import (
+    DockFill_Python,
+    DockFill_GlobalVenv,
+    DockFill_CodeVenv,
+    Dockfill_PythonPoetry,
+)
 from .dockfill_r import DockFill_R, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
 from .dockfill_rust import DockFill_Rust
@@ -35,6 +40,7 @@ class Anysnake:
 
     def __init__(
         self,
+        project_name,
         docker_image,
         python_version,
         bioconductor_version,
@@ -79,6 +85,7 @@ class Anysnake:
             docker_image = docker_image[: docker_image.rfind(":")]
             docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
         self.docker_image = str(docker_image)
+        self.project_name = project_name
 
         self.python_version = python_version
         self.bioconductor_version = bioconductor_version
@@ -93,18 +100,25 @@ class Anysnake:
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
         if self.rust_versions:
-            self.dockfill_rust = DockFill_Rust(self, self.rust_versions, self.cargo_install)
+            self.dockfill_rust = DockFill_Rust(
+                self, self.rust_versions, self.cargo_install
+            )
         else:
             self.dockfill_rust = None
-        self.strategies = [x for x in [
-            dfd,
-            self.dockfill_rust,
-            dfp,
-            DockFill_CodeVenv(
-                self, dfp, dfgv
-            ),  # since I want them earlier in the path!
-            dfgv,
-        ] if x is not None]
+        self.strategies = [
+            x
+            for x in [
+                dfd,
+                self.dockfill_rust,
+                dfp,
+                Dockfill_PythonPoetry(self, dfp),
+                DockFill_CodeVenv(
+                    self, dfp, dfgv
+                ),  # since I want them earlier in the path!
+                dfgv,
+            ]
+            if x is not None
+        ]
         dfr = None
         if r_version:
             self.R_version = r_version
@@ -171,10 +185,10 @@ class Anysnake:
             if isinstance(s, DockFill_Docker):
                 s.ensure()
 
-    def rebuild(self, args):
+    def rebuild(self):
         for s in self.strategies:
             if hasattr(s, "rebuild"):
-                s.rebuild(args)
+                s.rebuild()
 
     def _build_cmd(
         self,
@@ -187,7 +201,7 @@ class Anysnake:
         volumes_ro={},
         volumes_rw={},
         allow_writes=False,
-        su = True
+        su=True,
     ):
         env = env.copy()
         for (
@@ -222,9 +236,9 @@ class Anysnake:
         for h in home_files:
             p = Path("~").expanduser() / h
             if p.exists():
-                #if p.is_dir():
-                    #rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
-                #else:
+                # if p.is_dir():
+                # rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+                # else:
                 ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
         for h in home_dirs:
             p = Path("~").expanduser() / h
@@ -232,7 +246,7 @@ class Anysnake:
                 raise ValueError(f"Expected {p} to be a directory")
             p.mkdir(exist_ok=True, parents=True)
             rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
-        
+
         if allow_writes:
             rw_volumes.extend([df.volumes for df in self.strategies])
         else:
@@ -243,8 +257,11 @@ class Anysnake:
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
-        volumes = {source: target for (source, target) in volumes.items() if
-                   Path(source).exists()}
+        volumes = {
+            source: target
+            for (source, target) in volumes.items()
+            if Path(source).exists()
+        }
 
         cmd = ["docker", "run", "-it", "--rm"]
         for outside_path, v in sorted(volumes.items()):
@@ -321,13 +338,17 @@ class Anysnake:
         container = client.containers.create(
             docker_image, "/bin/bash /anysnake/run.sh", **run_kwargs
         )
+        container_result = b''
         try:
             return_code = -1
             container.start()
+            gen = container.logs(stdout=True, stderr=True, stream=True)
+            for piece in gen:
+                container_result += piece
+                print(piece, end="")
             return_code = container.wait()
         except KeyboardInterrupt:
             container.kill()
-        container_result = container.logs(stdout=True, stderr=True)
 
         if hasattr(log_name, "write"):
             log_name.write(container_result)
@@ -379,7 +400,7 @@ class Anysnake:
                     pass  # written in _run_docker
                 else:
                     print("container stdout/stderr", container_result)
-                print((Path(build_dir) / relative_check_filename), 'was missing')
+                print((Path(build_dir) / relative_check_filename), "was missing")
                 raise ValueError(
                     "Docker build failed. Investigate " + str(self.paths[log_name])
                 )

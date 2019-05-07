@@ -27,7 +27,7 @@ def parse_requirements(req_file):
     See readme.
 
     """
-    used_files = [req_file]
+    used_files = [str(Path(req_file).absolute())]
     with open(req_file) as op:
         p = tomlkit.loads(op.read())
     if "base" in p and "global_config" in p["base"]:
@@ -54,6 +54,11 @@ def parsed_to_anysnake(parsed):
     if not "base" in parsed:
         raise ValueError("no [base] in configuration")
     base = parsed["base"]
+
+    if "project_name" in parsed["base"]:
+        project_name = parsed["base"]
+    else:
+        project_name = Path(parsed["used_files"][0]).parent.name
 
     if not "python" in base or not base["python"]:
         raise ValueError(
@@ -94,8 +99,10 @@ def parsed_to_anysnake(parsed):
     # Todo: make configurable
     Path("logs").mkdir(parents=False, exist_ok=True)
 
-    additional_pip_lookup_res = list((parsed.get('pip_regexps', {})).items())
-    additional_pip_lookup_res.append(("^@gh/([^/]+)/(.+)", r"@git+https://github.com/\1/\2"))
+    additional_pip_lookup_res = list((parsed.get("pip_regexps", {})).items())
+    additional_pip_lookup_res.append(
+        ("^@gh/([^/]+)/(.+)", r"@git+https://github.com/\1/\2")
+    )
     global_pip_packages = parsed.get("global_python", {})
     local_pip_packages = parsed.get("python", {})
     check_pip_definitions(global_pip_packages, additional_pip_lookup_res)
@@ -115,17 +122,18 @@ def parsed_to_anysnake(parsed):
     cargo_install = parsed.get("cargo_install")
 
     return Anysnake(
-        docker_image,
-        python_version,
-        bioconductor_version,
-        R_version,
-        global_pip_packages,
-        local_pip_packages,
-        bioconductor_whitelist,
-        cran_mode,
-        storage_path,
-        storage_per_hostname,
-        code_path,
+        project_name=project_name,
+        docker_image=docker_image,
+        python_version=python_version,
+        bioconductor_version=bioconductor_version,
+        r_version=R_version,
+        global_python_packages=global_pip_packages,
+        local_python_packages=local_pip_packages,
+        bioconductor_whitelist=bioconductor_whitelist,
+        cran_mode=cran_mode,
+        storage_path=storage_path,
+        storage_per_hostname=storage_per_hostname,
+        code_path=code_path,
         environment_variables=environment_variables,
         post_build_cmd=post_build_cmd,
         rust_versions=rust_versions,
@@ -136,11 +144,11 @@ def parsed_to_anysnake(parsed):
 def check_pip_definitions(defs, pip_lookup_regexps):
     for k, v in defs.items():
         for rex, replacement in pip_lookup_regexps:
-            if re.match(rex,v):
+            if re.match(rex, v):
                 if isinstance(replacement, str):
                     defs[k] = re.sub(rex, replacement, v)
                 else:
-                    defs[k] = replacement[0].replace('\\1', k)
+                    defs[k] = replacement[0].replace("\\1", k)
 
     for k, v in defs.items():
         if not re.match(
@@ -160,4 +168,3 @@ def check_pip_definitions(defs, pip_lookup_regexps):
                 raise ValueError(
                     f"Invalid version specification - urls must start with @: '{k}' = '{v}' "
                 )
-
