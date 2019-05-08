@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import os
 import multiprocessing
-
+import sys
 
 from .dockfill_docker import DockFill_Docker
 from .dockfill_python import (
@@ -227,7 +227,8 @@ class Anysnake:
         tf.write(f"export PATH={path_str}\n")
         tf.write("source /anysnake/code_venv/bin/activate\n")
         tf.write(bash_script)
-        print("bash script", bash_script)
+        print("bash script running inside:\n", bash_script)
+        print("")
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
@@ -291,6 +292,7 @@ class Anysnake:
         cmd.append("--network=host")
         cmd.extend([self.docker_image, "/bin/bash", "/anysnake/run.sh"])
         last_was_dash = True
+        print('docker cmd')
         for x in cmd:
             if x.startswith("-") and not x.startswith("--"):
                 print("  " + x, end=" ")
@@ -345,7 +347,8 @@ class Anysnake:
             gen = container.logs(stdout=True, stderr=True, stream=True)
             for piece in gen:
                 container_result += piece
-                print(piece, end="")
+                print(piece.decode('utf-8'), end="")
+                sys.stdout.flush()
             return_code = container.wait()
         except KeyboardInterrupt:
             container.kill()
