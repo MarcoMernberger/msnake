@@ -12,7 +12,7 @@ RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$gvr9dr
 RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1" --shell=/bin/bash u1004
 RUN echo "root:test123" | chpasswd
 
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
   adduser\
   apt\
   autoconf\
@@ -27,6 +27,7 @@ RUN apt-get install -y \
   bwidget \
   bzip2\
   ca-certificates\
+  clang-6.0\
   cmake\
   coinor-libclp-dev\
   coinor-libsymphony-dev\
@@ -93,8 +94,11 @@ RUN apt-get install -y \
   libcap-ng0\
   libc-bin\
   libcgal-dev \
+  libclang1\
+  libclang-dev\
   libcom-err2\
   libcupsimage2\
+  libcurl4-gnutls-dev \
   libdb5.3\
   libdb5.3-dev\
   libdb-dev\
@@ -143,6 +147,7 @@ RUN apt-get install -y \
   liblzma5\
   liblzma-dev \
   liblzo2-2\
+  liblzo2-dev\
   libmagic-dev\
   libmagick++-dev \
   libmariadbclient18 \
@@ -190,10 +195,9 @@ RUN apt-get install -y \
   libpython2.7-stdlib\
   libpython-stdlib\
   libquantlib0-dev\
-  librdf0-dev\
   libraptor2-dev \
-  libcurl4-gnutls-dev \
   librasqal3-dev \
+  librdf0-dev\
   libreadline-dev \
   librrd-dev\
   libsasl2-dev \
@@ -288,8 +292,10 @@ RUN apt-get install -y \
   python-dev\
   python-minimal\
   quilt\
+  rsync\
   sed\
   sensible-utils\
+  sudo\
   sysvinit-utils\
   t1utils\
   tar\
@@ -299,6 +305,7 @@ RUN apt-get install -y \
   tzdata\
   ubuntu-keyring\
   unixodbc-dev\
+  unzip\
   util-linux\
   vim\
   wget\
@@ -325,6 +332,6 @@ RUN usermod -g sudo u1001
 RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
-RUN apt-get install -y sudo unzip liblzo2-dev libclang-dev libclang1 clang-6.0
+RUN apt-get install -y 
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
