@@ -51,7 +51,7 @@ def get_volumes_config(config, key2):
     for key1 in ["global_run", "run"]:
         if key1 in config and key2 in config[key1]:
             for (f, t) in config[key1][key2]:
-                result[Path(f).absolute()] = t
+                result[Path(f).expanduser().absolute()] = t
     return result
 
 
@@ -143,18 +143,32 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
 
 @main.command()
 @click.option("--no-build/--build", default=False)
+@click.option("--pre/--no-pre", default=True, help="run pre_run_inside/outside")
+@click.option("--post/--no-post", default=True, help="run post_run_inside/outside")
 @click.argument("cmd", nargs=-1)
-def run(cmd, no_build=False):
+def run(cmd, no_build=False, pre=True, post=True):
     """Run a command"""
+    import subprocess
     d, config = get_anysnake()
     if not no_build:
         d.ensure()
     else:
         d.ensure_just_docker()
 
+    pre_run_outside = config.get('run', {}).get('pre_run_outside', False)
+    pre_run_inside = config.get('run', {}).get('pre_run_inside', False)
+    if pre and pre_run_outside:
+        subprocess.Popen(pre_run_outside, shell=True).communicate()
+    cmd = "\n" + " ".join(cmd) + "\n"
+    if pre and pre_run_inside:
+        cmd = pre_run_inside + cmd
+    post_run_outside = config.get('run', {}).get('post_run_outside', False)
+    post_run_inside = config.get('run', {}).get('post_run_inside', False)
+    if post and post_run_inside:
+        cmd += post_run_inside
     print(
         d.run(
-            " ".join(cmd),
+            cmd,
             allow_writes=False,
             home_files=home_files,
             home_dirs=home_dirs,
@@ -162,12 +176,8 @@ def run(cmd, no_build=False):
             volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         )
     )
-    post_run = config.get("run", {}).get("post_run", False)
-    if post_run:
-        import subprocess
-
-        p = subprocess.Popen(post_run, shell=True)
-        p.communicate()
+    if post and post_run_outside:
+        subprocess.Popen(post_run_outside, shell=True).communicate()
 
 
 @main.command()
@@ -272,6 +282,15 @@ code_path="code"
 [run]
 additional_volumes_ro = [['/opt', '/opt']]
 additional_volumes_rw = [['/home/some_user/.hgrc', '/home/u1000/.hgrc']]
+pre_run_outside = \"""
+        echo "bash script, runs outside of the continer before 'run'"
+\"""
+
+pre_run_inside = \"""
+        echo "bash script, runs inside of the continer before 'run' (ie. after pre_run_outside)"
+\"""
+post_run_inside = "echo 'bash script running inside container after run cmd'"
+post_run_outside = "echo 'bash script running outside container after run cmd'"
 
 [global_python]
 jupyter=""

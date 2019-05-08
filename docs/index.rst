@@ -93,7 +93,12 @@ Configuration for the run command
   volumes, read only
 - additional_volumes_rw = [["/outside_docker", "/inside_docker"]]: map additional docker
   volumes, read write
-- post_run = "cmd.sh": run this after executing any run command - cwd is project dir
+- pre_run_outside = "cmd.sh": run this before executing any run command - cwd is
+  project dir, runs outside container
+- pre_run_inside = "cmd.sh": run this before executing any run command, inside
+  container. cwd is /project
+- post_run_inside = "cmd.sh": run this after executing any run command - cwd is whatever run cmd left it at, inside continer
+- post_run_outside = "cmd.sh": run this after executing any run command - cwd is project dir, outside container
 
 [global_run]
 ------------
