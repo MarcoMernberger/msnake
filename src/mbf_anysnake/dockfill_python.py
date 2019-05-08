@@ -214,10 +214,13 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             # force rebuild
             if Path(self.poetry_path / "pyproject.toml").exists():
                 Path(self.poetry_path / "pyproject.toml").unlink()
-        packages_missing = (
-            set([safe_name(x) for x in self.packages])
-            - set([safe_name(x) for x in
-                  self.find_installed_packages(self.anysnake.major_python_version)])
+        packages_missing = set([safe_name(x) for x in self.packages]) - set(
+            [
+                safe_name(x)
+                for x in self.find_installed_packages(
+                    self.anysnake.major_python_version
+                )
+            ]
         )
         return self.install_with_poetry(self.packages, code_packages, packages_missing)
 
@@ -270,6 +273,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                             )
                         except subprocess.CalledProcessError:
                             import shutil
+
                             if target_path.exists():
                                 shutil.rmtree(target_path)
                             raise
@@ -278,6 +282,19 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
 
     def find_installed_packages(self, major_python_version):
         return list(self.find_installed_package_versions(major_python_version).keys())
+
+    def find_extras(self, editable_package):
+        import configparser
+
+        # fn = self.clone_path / editable_package / "setup.cfg"
+        if fn.exists():
+            c = configparser.ConfigParser()
+            c.read(str(fn))
+            try:
+                return list(set(c["options.extras_require"].keys()) - set(['doc']))
+            except KeyError:
+                pass
+        return []
 
     def find_installed_package_versions(self, major_python_version):
         venv_dir = (
@@ -326,7 +343,8 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             if k not in editable_packages and safe_name(k) not in editable_packages:
                 toml += f'\t{k} = "{v}"\n'
             else:
-                toml += f'\t{k} = {{path = "/project/code/{k}"}}\n'
+                extras = [f'"{x}"' for x in self.find_extras(k)]
+                toml += f'\t{k} = {{path = "/project/code/{k}", extras = [{", ".join(extras)}]}}\n'
         new_toml = toml
         pyproject_toml = Path(self.poetry_path / "pyproject.toml")
         pyproject_toml.parent.mkdir(exist_ok=True)
@@ -532,7 +550,6 @@ class DockFill_CodeVenv(_DockerFillVenv):
         for entry in self.anysnake.local_python_packages.items():
             print(f"    {entry}")
 
-
     def fill_sitecustomize(self):
         lib_code = (
             Path(self.paths["docker_code_venv"])
@@ -578,11 +595,7 @@ for x in [
         )
         tf.flush()
 
-    def rebuild(self, packages):
-        if packages:
-            self.packages = {k: self.packages[k] for k in packages}
-            if not self.packages:
-                raise ValueError("No packages matching your spec")
+    def rebuild(self):
         self.fill_venv(rebuild=True)
 
     def fill_venv(self, rebuild=False):
