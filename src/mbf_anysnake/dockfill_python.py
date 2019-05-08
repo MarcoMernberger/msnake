@@ -200,7 +200,6 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
         return res
 
     def fill_venv(self, rebuild=False):
-        print("fill_venv", self.name)
         code_packages = {
             k: v
             for (k, v) in self.packages.items()
@@ -215,9 +214,10 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             # force rebuild
             if Path(self.poetry_path / "pyproject.toml").exists():
                 Path(self.poetry_path / "pyproject.toml").unlink()
-        packages_missing = bool(
-            set(self.packages)
-            - set(self.find_installed_packages(self.anysnake.major_python_version))
+        packages_missing = (
+            set([safe_name(x) for x in self.packages])
+            - set([safe_name(x) for x in
+                  self.find_installed_packages(self.anysnake.major_python_version)])
         )
         return self.install_with_poetry(self.packages, code_packages, packages_missing)
 
@@ -270,8 +270,8 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                             )
                         except subprocess.CalledProcessError:
                             import shutil
-
-                            shutil.rmtree(target_path)
+                            if target_path.exists():
+                                shutil.rmtree(target_path)
                             raise
 
         return result
@@ -324,9 +324,9 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
 """
         for k, v in sorted(packages.items()):
             if k not in editable_packages and safe_name(k) not in editable_packages:
-                toml += f'{k} = "{v}"\n'
+                toml += f'\t{k} = "{v}"\n'
             else:
-                toml += f'{k} = {{path = "/project/code/{k}"}}\n'
+                toml += f'\t{k} = {{path = "/project/code/{k}"}}\n'
         new_toml = toml
         pyproject_toml = Path(self.poetry_path / "pyproject.toml")
         pyproject_toml.parent.mkdir(exist_ok=True)
@@ -339,7 +339,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             pyproject_toml.write_text(new_toml)
             cmd = [
                 f"source {self.target_path_inside_docker}/bin/activate",
-                f"cd {self.poetry_path_inside_docker} && {self.paths['docker_poetry_venv']}/bin/poetry update",
+                f"cd {self.poetry_path_inside_docker} && {self.paths['docker_poetry_venv']}/bin/poetry update --verbose",
             ]
             cmd = "\n".join(cmd)
             volumes_ro = self.dockfill_python.volumes.copy()
