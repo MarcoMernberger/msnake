@@ -49,19 +49,6 @@ class DockFill_Python:
     def ensure(self):
 
         python_version = self.anysnake.python_version
-        if (
-            (python_version >= "3.5.3")
-            or (python_version >= "3.6.0")
-            or (python_version >= "2.7.13")
-        ):
-            # ssl_lib = "libssl-dev"
-            ssl_lib = None
-            ssl_cmd = ""
-            pass
-        else:
-            # raise ValueError("Find a fix for old ssl lib")
-            ssl_lib = "libssl1.0-dev"
-            ssl_cmd = f"sudo apt-get install -y {ssl_lib}"
 
         return self.anysnake.build(
             target_dir=self.paths["storage_python"],
@@ -77,7 +64,6 @@ cd ~/
 git clone git://github.com/pyenv/pyenv.git
 cd pyenv/plugins/python-build
 ./install.sh
-{ssl_cmd}
 
 export MAKE_OPTS=-j{self.anysnake.cores}
 export CONFIGURE_OPTS=--enable-shared
@@ -114,6 +100,9 @@ def safe_name(name):
 
 class _Dockfill_Venv_Base:
     def create_venv(self):
+        additional_cmd = ''
+        if self.python_version[0] == '2':
+            additional_cmd = f"{self.target_path_inside_docker}/bin/pip install pyopenssl ndg-httpsclient pyasn1"
         return self.anysnake.build(
             target_dir=self.target_path,
             target_dir_inside_docker=self.target_path_inside_docker,
@@ -122,6 +111,7 @@ class _Dockfill_Venv_Base:
             additional_volumes=self.dockfill_python.volumes,
             build_cmds=f"""
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.target_path_inside_docker}
+{additional_cmd}
 echo "done"
 """,
         )
@@ -164,6 +154,9 @@ class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
 
             env["EXTPATH"] = ":".join(paths)
             cmd = "pip install poetry"
+            if self.python_version[0] == '2':
+                cmd += f" pyopenssl ndg-httpsclient pyasn1"
+        
             return_code, logs = self.anysnake._run_docker(
                 f"""
     #!/bin/bash
