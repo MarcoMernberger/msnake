@@ -52,6 +52,7 @@ class Anysnake:
         storage_path,
         storage_per_hostname,
         code_path,
+        code_path_docker,
         cores=None,
         cran_mirror="https://cloud.r-project.org",
         environment_variables={},
@@ -78,15 +79,12 @@ class Anysnake:
         self.paths = {
             "storage": storage_path,
             "code": code_path,
+            "docker_code": code_path_docker,
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
         }
 
         dfd = DockFill_Docker(self, docker_build_cmds)
-        if docker_image.endswith(":%md5sum%"):
-            docker_image = docker_image[: docker_image.rfind(":")]
-            docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
-        self.docker_image = str(docker_image)
         self.project_name = project_name
 
         self.python_version = python_version
@@ -149,6 +147,11 @@ class Anysnake:
             if hasattr(df, "env"):
                 self.environment_variables.update(df.env)
 
+        if docker_image.endswith(":%md5sum%"):
+            docker_image = docker_image[: docker_image.rfind(":")]
+            docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
+        self.docker_image = str(docker_image)
+        
     def pprint(self):
         print("Anysnake")
         print(f"  Storage path: {self.paths['storage']}")

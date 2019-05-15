@@ -23,7 +23,7 @@ class DockFill_Python:
                     self.anysnake, Path("python") / self.python_version
                 ),
                 "docker_storage_python": "/anysnake/python",
-                "docker_code": "/project/code",
+                # "docker_code": "/project/code",
                 "log_python": self.paths["log_storage"]
                 / f"anysnake.python.{self.python_version}.log",
             }
@@ -32,15 +32,22 @@ class DockFill_Python:
             anysnake.paths["storage_python"]: anysnake.paths["docker_storage_python"]
         }
 
+    def get_additional_docker_build_cmds(self):
+        if self.python_version.startswith("2"):
+            # python beyond these versions needs libssl 1.1
+            # the older ones need libssl1.0
+            # on older debians/ubuntus that would be libssl-dev
+            # but on 18.04+ it's libssl1.0-dev
+            # and we're not anticipating building on something older
+            return "\nRUN apt-get install -y libssl1.0-dev\n"
+        else:
+            return ""
+
     def pprint(self):
         print(f"  Python version={self.python_version}")
 
     def ensure(self):
-        # python beyond these versions needs libssl 1.1
-        # the older ones need libssl1.0
-        # on older debians/ubuntus that would be libssl-dev
-        # but on 18.04+ it's libssl1.0-dev
-        # and we're not anticipating building on something older
+
         python_version = self.anysnake.python_version
         if (
             (python_version >= "3.5.3")
@@ -76,6 +83,8 @@ export MAKE_OPTS=-j{self.anysnake.cores}
 export CONFIGURE_OPTS=--enable-shared
 export PYTHON_CONFIGURE_OPTS=--enable-shared
 python-build {python_version} {self.paths['docker_storage_python']}
+#curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+#{self.paths['docker_storage_python']}/bin/python get-pip.py
 {self.paths['docker_storage_python']}/bin/pip install -U pip virtualenv
 chown {os.getuid()}:{os.getgid()} {self.paths['docker_storage_python']} -R
 echo "done"
@@ -291,7 +300,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             c = configparser.ConfigParser()
             c.read(str(fn))
             try:
-                return list(set(c["options.extras_require"].keys()) - set(['doc']))
+                return list(set(c["options.extras_require"].keys()) - set(["doc"]))
             except KeyError:
                 pass
         return []
@@ -344,7 +353,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 toml += f'\t{k} = "{v}"\n'
             else:
                 extras = [f'"{x}"' for x in self.find_extras(k)]
-                toml += f'\t{k} = {{path = "/project/code/{k}", extras = [{", ".join(extras)}]}}\n'
+                toml += f'\t{k} = {{path = "{self.paths["docker_code"]}/{k}", extras = [{", ".join(extras)}]}}\n'
         new_toml = toml
         pyproject_toml = Path(self.poetry_path / "pyproject.toml")
         pyproject_toml.parent.mkdir(exist_ok=True)
@@ -481,7 +490,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
                 "code_venv": self.paths["code"] / "venv" / self.python_version,
                 "docker_code_venv": "/anysnake/code_venv",
                 "code_clones": self.paths["code"],
-                "docker_code_clones": "/project/code",
+                "docker_code_clones": self.paths["docker_code"],
             }
         )
         self.target_path = self.paths["code_venv"]

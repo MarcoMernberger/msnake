@@ -216,7 +216,6 @@ RUN apt-get update && apt-get install -y \
   libsodium-dev\
   libsombok3\
   libsqlite3-dev \
-  libsqlite3-dev\
   libss2\
   libssh-dev\
   libssl1.0.0\
@@ -291,6 +290,7 @@ RUN apt-get update && apt-get install -y \
   python3-dev \
   python-dev\
   python-minimal\
+  python-openssl\
   quilt\
   rsync\
   sed\
@@ -317,8 +317,8 @@ RUN apt-get update && apt-get install -y \
   xserver-common\
   xvfb\
   xz-utils\
-  zlib1g
-
+  zlib1g\
+  zlib1g-dev 
 RUN ln -s  /usr/bin/nvcc /bin/nvcc
 RUN mkdir -p /usr/local/cuda/bin
 RUN ln -s  /usr/bin/nvcc  /usr/local/cuda/bin/nvcc
@@ -342,4 +342,3 @@ RUN chown u1004 /home/u1004 -R
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
 RUN apt-get -y install ssh && mkdir /run/sshd && echo "Port 8822" > "/etc/ssh/sshd_config"
-        

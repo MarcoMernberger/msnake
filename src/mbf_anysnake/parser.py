@@ -110,6 +110,13 @@ def parsed_to_anysnake(parsed):
         del base["code_path"]
     else:
         code_path = Path("code")
+    if "code_path_docker" in base:
+        code_path_docker = Path(base["code_path_docker"])
+        if not code_path_docker.is_absolute():
+            code_path_docker = Path('/project') / code_path_docker
+        del base["code_path_docker"]
+    else:
+        code_path_docker = Path("/project/code")
 
     # Todo: make configurable
     Path("logs").mkdir(parents=False, exist_ok=True)
@@ -153,6 +160,7 @@ def parsed_to_anysnake(parsed):
         storage_path=storage_path,
         storage_per_hostname=storage_per_hostname,
         code_path=code_path,
+        code_path_docker=code_path_docker,
         environment_variables=environment_variables,
         post_build_cmd=post_build_cmd,
         rust_versions=rust_versions,

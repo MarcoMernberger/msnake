@@ -34,6 +34,18 @@ class DockFill_Docker:
         self.docker_build_cmds = docker_build_cmds
         self.volumes = {}
 
+    def get_dockerfile_text(self, docker_image_name):
+        b = (
+                self.paths["docker_image_build_scripts"]
+                / docker_image_name
+                / "Dockerfile"
+            ).read_text()
+        for s in self.anysnake.strategies:
+            if hasattr(s, 'get_additional_docker_build_cmds'):
+                b += s.get_additional_docker_build_cmds()
+        b += "\n" + self.docker_build_cmds + "\n"
+        return b
+
     def ensure(self):
         """Build (or pull) the docker container if it's not present in the system.
         pull only happens if we don't have a build script
@@ -45,16 +57,17 @@ class DockFill_Docker:
         if self.anysnake.docker_image in tags_available:
             pass
         else:
+            docker_image = self.anysnake.docker_image[: self.anysnake.docker_image.rfind(":")]
             bs = (
                 self.paths["docker_image_build_scripts"]
-                / self.anysnake.docker_image[: self.anysnake.docker_image.rfind(":")]
+                / docker_image
                 / "build.sh"
             )
             if bs.exists():
                 with tempfile.TemporaryDirectory() as td:
                     copytree(str(bs.parent), td)
                     df = Path(td) / 'Dockerfile'
-                    df.write_text(df.read_text() + "\n" + self.docker_build_cmds + "\n")
+                    df.write_text(self.get_dockerfile_text(docker_image))
                     print("having to call", bs)
                     print(os.listdir(td))
                     subprocess.check_call(["./build.sh"], cwd=str(td))
@@ -72,13 +85,8 @@ class DockFill_Docker:
         dockerfile = ()
         hash = hashlib.md5()
         hash.update(
-            (
-                self.paths["docker_image_build_scripts"]
-                / docker_image_name
-                / "Dockerfile"
-            ).read_bytes()
+            self.get_dockerfile_text(docker_image_name).encode('utf-8')
         )
-        hash.update(("\n" + self.docker_build_cmds + "\n").encode("utf-8"))
         hash.update(
             (
                 self.paths["docker_image_build_scripts"] / docker_image_name / "sudoers"
