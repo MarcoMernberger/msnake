@@ -18,3 +18,13 @@ u1002 ALL = (root) NOPASSWD: /usr/bin/apt-get
 u1003 ALL = (root) NOPASSWD: /usr/bin/apt-get
 u1004 ALL = (root) NOPASSWD: /usr/bin/apt-get
 
+u1001 ALL = (root) NOPASSWD: /usr/sbin/sshd
+u1002 ALL = (root) NOPASSWD: /usr/sbin/sshd
+u1003 ALL = (root) NOPASSWD: /usr/sbin/sshd
+u1004 ALL = (root) NOPASSWD: /usr/sbin/sshd
+
+u1001 ALL = (root) NOPASSWD: /bin/mkdir
+u1002 ALL = (root) NOPASSWD: /bin/mkdir
+u1003 ALL = (root) NOPASSWD: /bin/mkdir
+u1004 ALL = (root) NOPASSWD: /bin/mkdir
+

@@ -84,6 +84,10 @@ Basic configuration.
   rustup. The first one will be the 'default toolchain'. Note that the stable/nightly
   'channels' are not supported - they would be supposed to 'auto update' and anysnake only reruns the
   installation if the rust_versions definition changes.
+- port = ["1234", "1234+", "1234+:4567"] - map docker ports.
+  optional + means next free one
+- docker_build_cmds = "RUN apt-get install -y ssh" - these are appended to the
+  dockerfile when building the docker
 
 [run]
 ------

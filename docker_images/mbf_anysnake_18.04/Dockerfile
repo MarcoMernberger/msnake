@@ -332,6 +332,14 @@ RUN usermod -g sudo u1001
 RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
-RUN apt-get install -y 
+RUN mkdir /home/u1000/.config /home/u1001/.config /home/u1002/.config /home/u1003/.config /home/u1004/.config
+RUN chown u1000 /home/u1000 -R
+RUN chown u1001 /home/u1001 -R
+RUN chown u1002 /home/u1002 -R
+RUN chown u1003 /home/u1003 -R
+RUN chown u1004 /home/u1004 -R
+#RUN apt-get install -y 
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
+RUN apt-get -y install ssh && mkdir /run/sshd && echo "Port 8822" > "/etc/ssh/sshd_config"
+        

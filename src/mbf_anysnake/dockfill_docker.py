@@ -3,10 +3,25 @@
 from pathlib import Path
 import subprocess
 import docker
+import tempfile
+import shutil
+import os
+
+
+def copytree(src, dst, symlinks=False, ignore=None):
+    """Since shutil.copytree insists that the directory must not exist
+    exist. Does not honor symlinks or ignore in top directory"""
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, symlinks, ignore)
+        else:
+            shutil.copy2(s, d)
 
 
 class DockFill_Docker:
-    def __init__(self, anysnake):
+    def __init__(self, anysnake, docker_build_cmds=""):
         self.anysnake = anysnake
         self.paths = self.anysnake.paths
         self.paths.update(
@@ -16,6 +31,7 @@ class DockFill_Docker:
                 )
             }
         )
+        self.docker_build_cmds = docker_build_cmds
         self.volumes = {}
 
     def ensure(self):
@@ -35,8 +51,13 @@ class DockFill_Docker:
                 / "build.sh"
             )
             if bs.exists():
-                print("having to call", bs)
-                subprocess.check_call([str(bs)], cwd=str(bs.parent))
+                with tempfile.TemporaryDirectory() as td:
+                    copytree(str(bs.parent), td)
+                    df = Path(td) / 'Dockerfile'
+                    df.write_text(df.read_text() + "\n" + self.docker_build_cmds + "\n")
+                    print("having to call", bs)
+                    print(os.listdir(td))
+                    subprocess.check_call(["./build.sh"], cwd=str(td))
             else:
                 print(bs, "not found")
                 client.images.pull(self.anysnake.docker_image)
@@ -48,11 +69,20 @@ class DockFill_Docker:
     def get_dockerfile_hash(self, docker_image_name):
         import hashlib
 
-        dockerfile = (
-            
-        )
+        dockerfile = ()
         hash = hashlib.md5()
-        hash.update((self.paths["docker_image_build_scripts"] / docker_image_name / "Dockerfile").read_bytes())
-        hash.update((self.paths["docker_image_build_scripts"] / docker_image_name / "sudoers").read_bytes())
+        hash.update(
+            (
+                self.paths["docker_image_build_scripts"]
+                / docker_image_name
+                / "Dockerfile"
+            ).read_bytes()
+        )
+        hash.update(("\n" + self.docker_build_cmds + "\n").encode("utf-8"))
+        hash.update(
+            (
+                self.paths["docker_image_build_scripts"] / docker_image_name / "sudoers"
+            ).read_bytes()
+        )
         tag = hash.hexdigest()
         return tag

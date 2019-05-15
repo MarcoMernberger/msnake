@@ -50,6 +50,21 @@ def parse_requirements(req_file):
     return p
 
 
+def verify_port(port_def):
+    """verify that a port definied in anysnake.toml looks like
+    1243
+    1234+ ( search next free port)
+    1234+:4567 (external/internal port)
+    """
+    if re.match(r"^\d+\+?$", str(port_def)):
+        port_def = str(port_def), str(port_def).replace("+",'')
+    elif re.match(r"^(\d+\+?):(\d+)$", str(port_def)):
+        port_def = tuple(re.findall("(\d+\+?):(\d+)", str(port_def))[0])
+    else:
+        raise ValueError(f"invalid port def '{port_def}'")
+    return port_def
+
+
 def parsed_to_anysnake(parsed):
     if not "base" in parsed:
         raise ValueError("no [base] in configuration")
@@ -121,6 +136,10 @@ def parsed_to_anysnake(parsed):
         rust_versions.append("1.30.0")
     cargo_install = parsed.get("cargo_install")
 
+    ports = [verify_port(x) for x in parsed.get("base", {}).get("ports", [])]
+
+    docker_build_cmds = parsed.get("base", {}).get("docker_build_cmds", '')
+
     return Anysnake(
         project_name=project_name,
         docker_image=docker_image,
@@ -138,6 +157,8 @@ def parsed_to_anysnake(parsed):
         post_build_cmd=post_build_cmd,
         rust_versions=rust_versions,
         cargo_install=cargo_install,
+        ports=ports,
+        docker_build_cmds=docker_build_cmds,
     )
 
 

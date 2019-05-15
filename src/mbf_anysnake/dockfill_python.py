@@ -209,8 +209,8 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             and re.match(re_github, v[1:])  # github
         }
         code_names = set(code_packages.keys())
-        self.clone_code_packages(code_packages)
-        if rebuild:
+        any_cloned = self.clone_code_packages(code_packages)
+        if rebuild or any_cloned:
             # force rebuild
             if Path(self.poetry_path / "pyproject.toml").exists():
                 Path(self.poetry_path / "pyproject.toml").unlink()
@@ -286,7 +286,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
     def find_extras(self, editable_package):
         import configparser
 
-        # fn = self.clone_path / editable_package / "setup.cfg"
+        fn = self.clone_path / editable_package / "setup.cfg"
         if fn.exists():
             c = configparser.ConfigParser()
             c.read(str(fn))

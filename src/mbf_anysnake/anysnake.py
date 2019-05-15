@@ -21,7 +21,7 @@ from .dockfill_python import (
 from .dockfill_r import DockFill_R, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
 from .dockfill_rust import DockFill_Rust
-from .util import combine_volumes
+from .util import combine_volumes, get_next_free_port
 
 
 class Anysnake:
@@ -58,6 +58,8 @@ class Anysnake:
         post_build_cmd=False,
         rust_versions=[],
         cargo_install=[],
+        ports = [],
+        docker_build_cmds=""
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -80,7 +82,7 @@ class Anysnake:
             "log_code": code_path / "logs",
         }
 
-        dfd = DockFill_Docker(self)
+        dfd = DockFill_Docker(self, docker_build_cmds)
         if docker_image.endswith(":%md5sum%"):
             docker_image = docker_image[: docker_image.rfind(":")]
             docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
@@ -96,6 +98,8 @@ class Anysnake:
         self.post_build_cmd = post_build_cmd
         self.rust_versions = rust_versions
         self.cargo_install = cargo_install
+        self.ports = ports
+        self.docker_build_cmds = docker_build_cmds
 
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
@@ -203,6 +207,9 @@ class Anysnake:
         allow_writes=False,
         su=True,
     ):
+        """
+        ports is merged with those defined in the config/object creation
+        """
         env = env.copy()
         for (
             k
@@ -285,6 +292,10 @@ class Anysnake:
                 ]
             )
 
+        for from_port, to_port in self.ports:
+            if from_port.endswith('+'):
+                from_port = get_next_free_port(int(from_port[:-1]))
+            cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
         for from_port, to_port in ports:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 

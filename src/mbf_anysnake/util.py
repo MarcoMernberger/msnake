@@ -71,3 +71,22 @@ def dict_to_toml(d):
             table.add(k, v)
         toml.add(key, table)
     return toml
+
+
+def get_next_free_port(start_at):
+    import socket
+
+    try_next = True
+    port = start_at
+    while try_next:
+        try:
+            s = socket.socket()
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("localhost", port))
+            s.close()
+            try_next = False
+        except socket.error:
+            port += 1
+        if port > start_at + 100:
+            raise ValueError("No empty port found within search range")
+    return port
