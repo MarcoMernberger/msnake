@@ -303,7 +303,7 @@ class Anysnake:
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
 
         cmd.extend(["--workdir", "/project"])
-        cmd.append("--network=host")
+        cmd.append("--network=bridge")
         cmd.extend([self.docker_image, "/bin/bash", "/anysnake/run.sh"])
         last_was_dash = True
         print('docker cmd')

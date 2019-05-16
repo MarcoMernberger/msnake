@@ -240,6 +240,7 @@ def ssh(no_build=False):
     d.run( """
         echo "now starting ssh server"
         sudo /usr/sbin/sshd -D
+        #/usr/bin/fish
         """,
         home_files=home_files,
         home_dirs=home_dirs,
