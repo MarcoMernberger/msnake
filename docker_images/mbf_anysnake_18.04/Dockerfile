@@ -341,4 +341,4 @@ RUN chown u1004 /home/u1004 -R
 #RUN apt-get install -y 
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
-RUN apt-get -y install ssh && mkdir /run/sshd && echo "Port 8822" > "/etc/ssh/sshd_config"
+RUN apt-get -y install ssh && mkdir /run/sshd

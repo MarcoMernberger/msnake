@@ -197,6 +197,20 @@ class Anysnake:
             if hasattr(s, "rebuild"):
                 s.rebuild()
 
+
+    def get_environment_variables(self, env_base):
+        env = env_base.copy()
+        env = env.copy()
+        for (
+            k
+        ) in (
+            self.environment_variables.keys()
+        ):  # don't use update here - won't work with the toml object
+            env[k] = self.environment_variables[k]
+        env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
+        env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
+        return env
+
     def _build_cmd(
         self,
         bash_script,
@@ -208,21 +222,12 @@ class Anysnake:
         volumes_ro={},
         volumes_rw={},
         allow_writes=False,
-        su=True,
     ):
         """
         ports is merged with those defined in the config/object creation
         """
-        env = env.copy()
-        for (
-            k
-        ) in (
-            self.environment_variables.keys()
-        ):  # don't use update here - won't work with the toml object
-            env[k] = self.environment_variables[k]
-        env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
-        env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
-
+        env = self.get_environment_variables(env)
+        
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
         # so we use the command line interface...

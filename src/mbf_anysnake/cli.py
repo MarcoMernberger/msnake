@@ -1,4 +1,6 @@
 # -*- coding: future_fstrings -*-
+import os
+import tempfile
 import click
 import click_completion
 
@@ -122,7 +124,6 @@ def rebuild_global_venv():
 )
 def shell(no_build=False, allow_writes=False, include_perf=False):
     """Run a shell with everything mapped (build if necessary)"""
-    import os
 
     d, config = get_anysnake()
     if not no_build:
@@ -209,6 +210,7 @@ def jupyter(no_build=False):
         ports=[(host_port, 8888)],
     )
 
+
 @main.command()
 @click.option("--no-build/--build", default=False)
 def ssh(no_build=False):
@@ -235,11 +237,27 @@ def ssh(no_build=False):
         home_dirs.append(".vscode-remote")
     home_files.append(".ssh/authorized_keys")
 
+    tf = tempfile.NamedTemporaryFile(mode="w", suffix='.env')
+    tf.write(
+        "\n".join(
+            [
+                f"{key}={value}"
+                for (key, value) in d.get_environment_variables({}).items()
+            ]
+        )
+    )
+    tf.flush()
+
     volumes_ro = get_volumes_config(config, "additional_volumes_ro")
-    volumes_ro
-    d.run( """
+    home_inside_docker = "/home/u%i" % os.getuid()
+    volumes_ro[Path(tf.name)] = Path(home_inside_docker) / ".ssh/environment"
+    import pprint
+    pprint.pprint(volumes_ro)
+    d.run(
+        f"""
         echo "now starting ssh server"
-        sudo /usr/sbin/sshd -D
+        echo "Port 8822\nPermitUserEnvironment yes\n" >/tmp/sshd_config
+        sudo /usr/sbin/sshd -D -f /tmp/sshd_config
         #/usr/bin/fish
         """,
         home_files=home_files,
