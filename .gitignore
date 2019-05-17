@@ -53,3 +53,4 @@ result_images
 tests/run/*
 tests/zipped/*
 pip-wheel-metadata/
+.vscode

@@ -529,7 +529,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
                         output_fn.write_bytes(output)
                 else:
                     output_fn.write_bytes(input)
-            output_fn.chmod(input_fn.stat().st_mode)
+                output_fn.chmod(input_fn.stat().st_mode)
         pth_path = (
             self.paths["code_venv"]
             / "lib"
