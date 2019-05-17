@@ -59,8 +59,8 @@ class Anysnake:
         post_build_cmd=False,
         rust_versions=[],
         cargo_install=[],
-        ports = [],
-        docker_build_cmds=""
+        ports=[],
+        docker_build_cmds="",
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -151,7 +151,7 @@ class Anysnake:
             docker_image = docker_image[: docker_image.rfind(":")]
             docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
         self.docker_image = str(docker_image)
-        
+
     def pprint(self):
         print("Anysnake")
         print(f"  Storage path: {self.paths['storage']}")
@@ -197,15 +197,11 @@ class Anysnake:
             if hasattr(s, "rebuild"):
                 s.rebuild()
 
-
     def get_environment_variables(self, env_base):
         env = env_base.copy()
         env = env.copy()
-        for (
-            k
-        ) in (
-            self.environment_variables.keys()
-        ):  # don't use update here - won't work with the toml object
+        for k in self.environment_variables.keys():
+            # don't use update here - won't work with the toml object
             env[k] = self.environment_variables[k]
         env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
         env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
@@ -227,7 +223,7 @@ class Anysnake:
         ports is merged with those defined in the config/object creation
         """
         env = self.get_environment_variables(env)
-        
+
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
         # so we use the command line interface...
@@ -301,7 +297,7 @@ class Anysnake:
             )
 
         for from_port, to_port in self.ports:
-            if from_port.endswith('+'):
+            if from_port.endswith("+"):
                 from_port = get_next_free_port(int(from_port[:-1]))
             cmd.extend(["-p", "%s:%s" % (from_port, to_port)])
         for from_port, to_port in ports:
@@ -311,7 +307,7 @@ class Anysnake:
         cmd.append("--network=bridge")
         cmd.extend([self.docker_image, "/bin/bash", "/anysnake/run.sh"])
         last_was_dash = True
-        print('docker cmd')
+        print("docker cmd")
         for x in cmd:
             if x.startswith("-") and not x.startswith("--"):
                 print("  " + x, end=" ")
@@ -359,14 +355,14 @@ class Anysnake:
         container = client.containers.create(
             docker_image, "/bin/bash /anysnake/run.sh", **run_kwargs
         )
-        container_result = b''
+        container_result = b""
         try:
             return_code = -1
             container.start()
             gen = container.logs(stdout=True, stderr=True, stream=True)
             for piece in gen:
                 container_result += piece
-                print(piece.decode('utf-8'), end="")
+                print(piece.decode("utf-8"), end="")
                 sys.stdout.flush()
             return_code = container.wait()
         except KeyboardInterrupt:
