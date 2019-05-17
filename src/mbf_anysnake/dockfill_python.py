@@ -192,6 +192,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             }
         )
         self.poetry_path = self.clone_path / "poetry"
+        self.poetry_path.mkdir(exist_ok=True, parents=True)
         self.poetry_path_inside_docker = str(
             Path(self.clone_path_inside_docker) / "poetry"
         )
