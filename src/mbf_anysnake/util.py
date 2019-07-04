@@ -17,7 +17,8 @@ def combine_volumes(ro=[], rw=[]):
                     v = v["bind"]
                 elif isinstance(v, tuple):
                     v = v[0]
-                d[str(Path(k).absolute())] = (v, mode)
+                #d[str(Path(k).absolute())] = (v, mode)
+                d[(v, mode)] = str(Path(k).absolute())
     return d
 
 

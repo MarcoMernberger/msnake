@@ -270,13 +270,13 @@ class Anysnake:
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
         volumes = {
-            source: target
-            for (source, target) in volumes.items()
+            target: source
+            for (target, source) in volumes.items()
             if Path(source).exists()
         }
 
         cmd = ["docker", "run", "-it", "--rm"]
-        for outside_path, v in sorted(volumes.items()):
+        for v, outside_path in sorted(volumes.items(), key = lambda x: str(x[1])):
             inside_path, mode = v
             cmd.append("-v")
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
