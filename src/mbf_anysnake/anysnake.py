@@ -272,12 +272,11 @@ class Anysnake:
         volumes = {
             target: source
             for (target, source) in volumes.items()
-            if Path(source).exists()
+            if Path(target).exists()
         }
-
         cmd = ["docker", "run", "-it", "--rm"]
-        for v, outside_path in sorted(volumes.items(), key = lambda x: str(x[1])):
-            inside_path, mode = v
+        for v, (inside_path, mode) in sorted(volumes.items(), key = lambda x: str(x[1])):
+            outside_path = v
             cmd.append("-v")
             cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
@@ -337,7 +336,7 @@ class Anysnake:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {tf.name: "/anysnake/run.sh"}
+        volumes = {tf.name : "/anysnake/run.sh"}
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
@@ -346,14 +345,15 @@ class Anysnake:
                 volume_args[k] = {"bind": str(v[0]), "mode": v[1]}
             else:
                 volume_args[k] = {"bind": str(v), "mode": "rw"}
-        # pprint.pprint(volume_args)
         run_kwargs["volumes"] = volume_args
         if not root and not "user" in run_kwargs:
             run_kwargs["user"] = "%i:%i" % (os.getuid(), os.getgid())
         tf.write(bash_script)
         tf.flush()
         container = client.containers.create(
-            docker_image, "/bin/bash /anysnake/run.sh", **run_kwargs
+            docker_image, 
+            "/bin/bash /anysnake/run.sh", 
+            **run_kwargs
         )
         container_result = b""
         try:
@@ -412,13 +412,11 @@ class Anysnake:
                 log_name,
                 root=root,
             )
-
             if not (Path(build_dir) / relative_check_filename).exists():
                 if Path("logs").exists():
                     pass  # written in _run_docker
                 else:
                     print("container stdout/stderr", container_result)
-                print((Path(build_dir) / relative_check_filename), "was missing")
                 raise ValueError(
                     "Docker build failed. Investigate " + str(self.paths[log_name])
                 )

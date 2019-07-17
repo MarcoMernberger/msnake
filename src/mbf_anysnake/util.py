@@ -5,7 +5,6 @@ import shutil
 import time
 from pathlib import Path
 
-
 def combine_volumes(ro=[], rw=[]):
     d = dict()
     for (what, mode) in [(ro, "ro"), (rw, "rw")]:
@@ -17,8 +16,8 @@ def combine_volumes(ro=[], rw=[]):
                     v = v["bind"]
                 elif isinstance(v, tuple):
                     v = v[0]
-                #d[str(Path(k).absolute())] = (v, mode)
-                d[(v, mode)] = str(Path(k).absolute())
+                
+                d[str(Path(k).absolute())] = v, mode 
     return d
 
 

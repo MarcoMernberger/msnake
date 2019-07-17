@@ -156,7 +156,6 @@ class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
             cmd = "pip install poetry"
             if self.python_version[0] == '2':
                 cmd += f" pyopenssl ndg-httpsclient pyasn1"
-        
             return_code, logs = self.anysnake._run_docker(
                 f"""
     #!/bin/bash
