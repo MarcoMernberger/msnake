@@ -29,7 +29,7 @@ class DockFill_Python:
             }
         )
         self.volumes = {
-            anysnake.paths["storage_python"]: anysnake.paths["docker_storage_python"]
+            anysnake.paths["docker_storage_python"]: anysnake.paths["storage_python"]
         }
 
     def get_additional_docker_build_cmds(self):
@@ -100,8 +100,8 @@ def safe_name(name):
 
 class _Dockfill_Venv_Base:
     def create_venv(self):
-        additional_cmd = ''
-        if self.python_version[0] == '2':
+        additional_cmd = ""
+        if self.python_version[0] == "2":
             additional_cmd = f"{self.target_path_inside_docker}/bin/pip install pyopenssl ndg-httpsclient pyasn1"
         return self.anysnake.build(
             target_dir=self.target_path,
@@ -138,6 +138,9 @@ class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
         self.target_path_inside_docker = self.paths["docker_poetry_venv"]
         self.volumes = {}
 
+    def pprint(self):
+        pass
+
     def ensure(self):
         res = self.create_venv()
         res |= self.install_poetry()
@@ -148,13 +151,13 @@ class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
         if not poetry_bin.exists():
             print("install poetry")
             volumes_ro = self.dockfill_python.volumes.copy()
-            volumes_rw = {self.target_path: self.target_path_inside_docker}
+            volumes_rw = {self.target_path_inside_docke: self.target_pathr}
             env = {}
             paths = [self.target_path_inside_docker + "/bin"]
 
             env["EXTPATH"] = ":".join(paths)
             cmd = "pip install poetry"
-            if self.python_version[0] == '2':
+            if self.python_version[0] == "2":
                 cmd += f" pyopenssl ndg-httpsclient pyasn1"
             return_code, logs = self.anysnake._run_docker(
                 f"""
@@ -364,9 +367,9 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             cmd = "\n".join(cmd)
             volumes_ro = self.dockfill_python.volumes.copy()
             volumes_rw = {
-                self.target_path: self.target_path_inside_docker,
-                self.clone_path: self.clone_path_inside_docker,
-                self.paths["poetry_venv"]: self.paths["docker_poetry_venv"],
+                self.target_path_inside_docker: self.target_path,
+                self.clone_path_inside_docker: self.clone_path,
+                self.paths["docker_poetry_venv"]: self.paths["poetry_venv"],
             }
             env = {}
             paths = [self.target_path_inside_docker + "/bin"]
@@ -448,8 +451,8 @@ class DockFill_GlobalVenv(_DockerFillVenv):
 
         self.dockfill_python = dockfill_python
         self.volumes = {
-            self.paths["storage_venv"]: anysnake.paths["docker_storage_venv"],
-            self.paths["storage_clones"]: anysnake.paths["docker_storage_clones"],
+            anysnake.paths["docker_storage_venv"]: self.paths["storage_venv"],
+            anysnake.paths["docker_storage_clones"]: self.paths["storage_clones"],
         }
         self.packages = self.anysnake.global_python_packages
         self.shell_path = str(Path(self.paths["docker_storage_venv"]) / "bin")
@@ -491,8 +494,8 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.clone_path = self.paths["code_clones"]
         self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
-        self.volumes = {self.paths["code_venv"]: anysnake.paths[f"docker_code_venv"]}
-        self.rw_volumes = {self.paths["code"]: anysnake.paths[f"docker_code"]}
+        self.volumes = {anysnake.paths[f"docker_code_venv"]: self.paths["code_venv"]}
+        self.rw_volumes = {anysnake.paths[f"docker_code"]: self.paths["code"]}
         self.packages = self.anysnake.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
         super().__init__()

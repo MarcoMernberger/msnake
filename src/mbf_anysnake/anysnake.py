@@ -243,21 +243,23 @@ class Anysnake:
         tf.flush()
 
         home_inside_docker = "/home/u%i" % os.getuid()
-        ro_volumes = [{tf.name: "/anysnake/run.sh"}]
-        rw_volumes = [{os.path.abspath("."): "/project"}]
+        ro_volumes = [{"/anysnake/run.sh": tf.name}]
+        rw_volumes = [{"/project": os.path.abspath(".")}]
         for h in home_files:
             p = Path("~").expanduser() / h
             if p.exists():
                 # if p.is_dir():
                 # rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
                 # else:
-                ro_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+                target = str(Path(home_inside_docker) / h)
+                ro_volumes[0][target] = str(p)
         for h in home_dirs:
             p = Path("~").expanduser() / h
             if p.exists() and not p.is_dir():
                 raise ValueError(f"Expected {p} to be a directory")
             p.mkdir(exist_ok=True, parents=True)
-            rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+            target = str(Path(home_inside_docker) / h)
+            rw_volumes[0][target] = str(p)
 
         if allow_writes:
             rw_volumes.extend([df.volumes for df in self.strategies])
@@ -269,16 +271,13 @@ class Anysnake:
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
-        volumes = {
-            target: source
-            for (target, source) in volumes.items()
-            if Path(target).exists()
-        }
+        import pprint
+        pprint.pprint(volumes)
         cmd = ["docker", "run", "-it", "--rm"]
-        for v, (inside_path, mode) in sorted(volumes.items(), key = lambda x: str(x[1])):
-            outside_path = v
-            cmd.append("-v")
-            cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
+        for inside_path, (outside_path, mode) in sorted(volumes.items(), key = lambda x: str(x[1])):
+            if Path(outside_path).exists():
+                cmd.append("-v")
+                cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
         if not "HOME" in env:
             env["HOME"] = home_inside_docker
         for key, value in sorted(env.items()):

@@ -32,10 +32,10 @@ class DockFill_Rust:
             }
         )
         self.volumes = {
-            self.paths["storage_rustup"]: self.paths["docker_storage_rustup"]
+            self.paths["docker_storage_rustup"]: self.paths["storage_rustup"]
         }
         self.rw_volumes = {
-            self.paths["storage_cargo"]: self.paths["docker_storage_cargo"]
+            self.paths["docker_storage_cargo"]: self.paths["storage_cargo"]
         }
         self.env = {
             "RUSTUP_HOME": self.paths["docker_storage_rustup"],
@@ -72,8 +72,8 @@ class DockFill_Rust:
                 if not version in installed_versions:
                     cmd += f"rustup toolchain install {version} && cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
             volumes = {
-                self.paths["storage_rustup"]: self.paths["docker_storage_rustup"],
-                self.paths["storage_cargo"]: self.paths["docker_storage_cargo"],
+                self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
+                self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
             }
             self.anysnake._run_docker(
                 cmd, {"volumes": volumes, "environment": env}, "log_rust", root=True

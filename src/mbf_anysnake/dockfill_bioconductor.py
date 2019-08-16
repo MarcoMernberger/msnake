@@ -46,12 +46,8 @@ class DockFill_Bioconductor:
             }
         )
         self.volumes = {
-            self.paths["storage_bioconductor"]: self.paths[
-                "docker_storage_bioconductor"
-            ],
-            self.paths["storage_bioconductor_download"]: self.paths[
-                "docker_storage_bioconductor_download"
-            ],
+            self.paths[ "docker_storage_bioconductor" ]: self.paths["storage_bioconductor"],
+            self.paths[ "docker_storage_bioconductor_download" ]: self.paths["storage_bioconductor_download"],
         }
         self.env = {"R_LIBS_SITE": "/anysnake/bioconductor"}
 
@@ -224,22 +220,14 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 "RUSTUP_TOOLCHAIN"
             ] = "1.30.0"  # Todo: combine with the one in parser.py
             volumes = {
-                self.paths["storage_python"]: self.paths["docker_storage_python"],
-                self.paths["storage_venv"]: self.paths["docker_storage_venv"],
-                self.paths["storage_r"]: self.paths["docker_storage_r"],
-                Path(__file__).parent
-                / "_inside_dockfill_bioconductor.py": self.paths[
-                    "docker_storage_bioconductor"
-                ]
-                / "_inside_dockfill_bioconductor.py",
-                self.paths["storage_bioconductor_download"]: self.paths[
-                    "docker_storage_bioconductor_download"
-                ],
-                self.paths["storage_bioconductor"]: self.paths[
-                    "docker_storage_bioconductor"
-                ],
-                self.paths["storage_rustup"]: self.paths["docker_storage_rustup"],
-                self.paths["storage_cargo"]: self.paths["docker_storage_cargo"],
+                self.paths["docker_storage_python"]: self.paths["storage_python"],
+                self.paths["docker_storage_venv"]: self.paths["storage_venv"],
+                self.paths["docker_storage_r"]: self.paths["storage_r"],
+                self.paths[ "docker_storage_bioconductor" ] / "_inside_dockfill_bioconductor.py": Path(__file__).parent / "_inside_dockfill_bioconductor.py",
+                self.paths[ "docker_storage_bioconductor_download" ]: self.paths["storage_bioconductor_download"],
+                self.paths[ "docker_storage_bioconductor" ]: self.paths["storage_bioconductor"],
+                self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
+                self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
             }
             print("calling bioconductor install docker")
             self.anysnake._run_docker(

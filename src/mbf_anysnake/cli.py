@@ -36,12 +36,16 @@ def get_anysnake():
 
 
 def get_volumes_config(config, key2):
-    """Extract a volumes config from the config if present"""
+    """Extract a volumes config from the config if present.
+
+    Representation is a dictionary, 
+        target_path:  source_path
+    """
     result = {}
     for key1 in ["global_run", "run"]:
         if key1 in config and key2 in config[key1]:
-            for (f, t) in config[key1][key2]:
-                result[Path(f).expanduser().absolute()] = t
+            for (f, t) in config[key1][key2]: # from / to
+                result[t] = Path(f).expanduser().absolute()
     return result
 
 

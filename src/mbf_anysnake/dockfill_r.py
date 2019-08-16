@@ -23,7 +23,9 @@ class DockFill_R:
                 / f"anysnake.R.{self.R_version}.log",
             }
         )
-        self.volumes = {self.paths["storage_r"]: self.paths["docker_storage_r"]}
+        self.volumes = {
+            self.paths["docker_storage_r"]: self.paths["storage_r"]
+        }
         self.shell_path = str(Path(self.paths["docker_storage_r"]) / "bin")
 
     def pprint(self):
@@ -94,7 +96,9 @@ class DockFill_Rpy2:
                 / f"anysnake.rpy2.{self.python_version}-{self.R_version}.log",
             }
         )
-        self.volumes = {self.paths["storage_rpy2"]: self.paths["docker_storage_rpy2"]}
+        self.volumes = {
+            self.paths["docker_storage_rpy2"]: self.paths["storage_rpy2"]
+        }
         self.env = {'LD_LIBRARY_PATH': "/anysnake/R/lib/R/lib"}
 
     def pprint(self):
