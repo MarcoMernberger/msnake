@@ -227,6 +227,8 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 )
             ]
         )
+        print(packages_missing)
+        
         return self.install_with_poetry(self.packages, code_packages, packages_missing)
 
     def clone_code_packages(self, code_packages):
@@ -384,7 +386,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             for h in home_files:
                 p = Path("~").expanduser() / h
                 if p.exists():
-                    volumes_ro[str(p)] = str(Path(home_inside_docker) / h)
+                    volumes_ro[str(Path(home_inside_docker) / h)] = p
 
             env["EXTPATH"] = ":".join(paths)
             # /anysnake/code_venv/bin /anysnake/cargo/bin /anysnake/code_venv/bin /anysnake/storage_venv/bin /anysnake/R/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /machine/opt/infrastructure/client /machine/opt/infrastructure/repos/FloatingFileSystemClient

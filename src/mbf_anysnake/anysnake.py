@@ -335,16 +335,17 @@ class Anysnake:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {tf.name : "/anysnake/run.sh"}
+        volumes = {"/anysnake/run.sh" : tf.name }
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
             k = str(Path(k).absolute())
             if isinstance(v, tuple):
-                volume_args[k] = {"bind": str(v[0]), "mode": v[1]}
+                volume_args[str(v[0])] = {"bind": str(k), "mode": v[1]}
             else:
-                volume_args[k] = {"bind": str(v), "mode": "rw"}
+                volume_args[str(v)] = {"bind": k, "mode": "rw"}
         run_kwargs["volumes"] = volume_args
+        print(run_kwargs["volumes"])
         if not root and not "user" in run_kwargs:
             run_kwargs["user"] = "%i:%i" % (os.getuid(), os.getgid())
         tf.write(bash_script)
