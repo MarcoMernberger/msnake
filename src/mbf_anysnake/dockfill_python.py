@@ -151,7 +151,7 @@ class Dockfill_PythonPoetry(_Dockfill_Venv_Base):
         if not poetry_bin.exists():
             print("install poetry")
             volumes_ro = self.dockfill_python.volumes.copy()
-            volumes_rw = {self.target_path_inside_docke: self.target_pathr}
+            volumes_rw = {self.target_path_inside_docker: self.target_path}
             env = {}
             paths = [self.target_path_inside_docker + "/bin"]
 
