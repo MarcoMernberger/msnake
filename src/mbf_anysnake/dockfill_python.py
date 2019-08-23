@@ -496,7 +496,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.clone_path = self.paths["code_clones"]
         self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
-        self.volumes = {anysnake.paths[f"docker_code_venv"]: self.paths["code_venv"]}
+        self.volumes = {anysnake.paths[f"docker_code_venv"] : self.paths["code_venv"]}
         self.rw_volumes = {anysnake.paths[f"docker_code"]: self.paths["code"]}
         self.packages = self.anysnake.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")

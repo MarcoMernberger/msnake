@@ -403,7 +403,7 @@ class Anysnake:
             if build_dir.exists():
                 shutil.rmtree(str(build_dir))
             build_dir.mkdir(parents=True)
-            volumes = {build_dir: target_dir_inside_docker}
+            volumes = {target_dir_inside_docker : build_dir}
             if additional_volumes:
                 volumes.update(additional_volumes)
             container_result = self._run_docker(
