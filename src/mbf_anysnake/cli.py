@@ -217,6 +217,12 @@ def jupyter(no_build=False):
         ports=[(host_port, 8888)],
     )
 
+@main.command()
+def docker_tag():
+    """return the currently used docker_tag 
+    for integration purposes"""
+    d, config = get_anysnake()
+    print(d.docker_image)
 
 @main.command()
 @click.option("--no-build/--build", default=False)
