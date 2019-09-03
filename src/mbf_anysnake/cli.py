@@ -52,9 +52,12 @@ def get_volumes_config(config, key2):
 @main.command()
 @click.option("--do-time", default=False, is_flag=True)
 def build(do_time=False):
-    """Build everything if necessary - from docker to local venv from project.setup"""
+    """Build everything if necessary - from docker to local venv from project.setup 
+    Outputs full docker_image:tag
+    """
     d, _ = get_anysnake()
     d.ensure(do_time)
+    print(d.docker_image)
     return d
 
 
@@ -317,6 +320,11 @@ def default_config():
     p = Path("anysnake.toml")
     print(
         """[base]
+# docker image to use/build
+# use image:tag for full spec
+# or just 'image' for auto_build from mbf_anysnake
+# docker specs
+docker_image="mbf_anysnake_18.04"
 # optional global config to import
 #global_config="/etc/anysnake.tompl"
 # python version to use

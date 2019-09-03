@@ -82,7 +82,10 @@ def parsed_to_anysnake(parsed):
     python_version = base["python"]
 
     if "docker_image" in base:
-        docker_image = base["docker_image"]
+        if ':' in base["docker_image"]:
+            docker_image = base["docker_image"]
+        else:
+            docker_image = base["docker_image"] + ":%md5sum%"
     else:
         docker_image = "mbf_anysnake_18.04:%md5sum%"
 
