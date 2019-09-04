@@ -227,7 +227,6 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 )
             ]
         )
-        print(packages_missing)
         
         return self.install_with_poetry(self.packages, code_packages, packages_missing)
 

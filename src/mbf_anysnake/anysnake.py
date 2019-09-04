@@ -271,8 +271,6 @@ class Anysnake:
         ro_volumes.append(volumes_ro)
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
-        import pprint
-        pprint.pprint(volumes)
         cmd = ["docker", "run", "-it", "--rm"]
         for inside_path, (outside_path, mode) in sorted(volumes.items(), key = lambda x: str(x[1])):
             if Path(outside_path).exists():
