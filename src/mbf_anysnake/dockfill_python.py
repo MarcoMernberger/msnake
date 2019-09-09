@@ -240,7 +240,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             target_path = self.clone_path / name
             with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
                 if not target_path.exists():
-                    print("\tcloning", name)
+                    print("\tcloning", name, target_path)
                     result.add(name)
                     url = url_spec
                     if url.startswith("@"):
@@ -350,7 +350,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 toml += f'\t{k} = "{v}"\n'
             else:
                 extras = [f'"{x}"' for x in self.find_extras(k)]
-                toml += f'\t{k} = {{path = "{self.paths["docker_code"]}/{k}", extras = [{", ".join(extras)}]}}\n'
+                toml += f'\t{k} = {{path = "{self.clone_path_inside_docker}/{k}", extras = [{", ".join(extras)}]}}\n'
         new_toml = toml
         pyproject_toml = Path(self.poetry_path / "pyproject.toml")
         pyproject_toml.parent.mkdir(exist_ok=True)
