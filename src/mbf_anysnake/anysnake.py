@@ -18,6 +18,7 @@ from .dockfill_python import (
     DockFill_CodeVenv,
     Dockfill_PythonPoetry,
 )
+from .dockfill_clone import DockFill_Clone
 from .dockfill_r import DockFill_R, DockFill_Rpy2
 from .dockfill_bioconductor import DockFill_Bioconductor
 from .dockfill_rust import DockFill_Rust
@@ -61,6 +62,8 @@ class Anysnake:
         cargo_install=[],
         ports=[],
         docker_build_cmds="",
+        global_clones={},
+            local_clones={},
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -98,6 +101,8 @@ class Anysnake:
         self.cargo_install = cargo_install
         self.ports = ports
         self.docker_build_cmds = docker_build_cmds
+        self.global_clones = global_clones
+        self.local_clones = local_clones
 
         dfp = DockFill_Python(self)
         dfgv = DockFill_GlobalVenv(self, dfp)
@@ -140,6 +145,7 @@ class Anysnake:
             if self.bioconductor_version:
                 self.strategies.append(DockFill_Bioconductor(self, dfr))
 
+        self.strategies.append(DockFill_Clone(self))
         for k, v in self.paths.items():
             self.paths[k] = Path(v)
         self.environment_variables = dict(environment_variables)
@@ -343,7 +349,7 @@ class Anysnake:
             else:
                 volume_args[str(v)] = {"bind": k, "mode": "rw"}
         run_kwargs["volumes"] = volume_args
-        print(run_kwargs["volumes"])
+        # print(run_kwargs["volumes"])
         if not root and not "user" in run_kwargs:
             run_kwargs["user"] = "%i:%i" % (os.getuid(), os.getgid())
         tf.write(bash_script)

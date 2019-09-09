@@ -150,6 +150,11 @@ def parsed_to_anysnake(parsed):
 
     docker_build_cmds = parsed.get("base", {}).get("docker_build_cmds", '')
 
+    global_clones = parsed.get("global_clones", {})
+    local_clones = parsed.get("local_clones", {})
+    check_pip_definitions(global_clones, additional_pip_lookup_res)
+    check_pip_definitions(global_clones, additional_pip_lookup_res)
+    
     return Anysnake(
         project_name=project_name,
         docker_image=docker_image,
@@ -170,6 +175,8 @@ def parsed_to_anysnake(parsed):
         cargo_install=cargo_install,
         ports=ports,
         docker_build_cmds=docker_build_cmds,
+        global_clones = global_clones,
+        local_clones = local_clones,
     )
 
 

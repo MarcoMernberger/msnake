@@ -44,7 +44,7 @@ def get_volumes_config(config, key2):
     result = {}
     for key1 in ["global_run", "run"]:
         if key1 in config and key2 in config[key1]:
-            for (f, t) in config[key1][key2]: # from / to
+            for (f, t) in config[key1][key2]:  # from / to
                 result[t] = Path(f).expanduser().absolute()
     return result
 
@@ -195,6 +195,15 @@ def run(cmd, no_build=False, pre=True, post=True):
         subprocess.Popen(post_run_outside, shell=True).communicate()
 
 
+def check_if_nb_extensions_are_activated():
+    """Check if the nb extensions are activated"""
+    try:
+        d = Path("~/.jupyter/jupyter_notebook_config.json").expanduser().read_text()
+        return '"jupyter_nbextensions_configurator": true' in d
+    except IOError:
+        return False
+
+
 @main.command()
 @click.option("--no-build/--build", default=False)
 def jupyter(no_build=False):
@@ -207,9 +216,21 @@ def jupyter(no_build=False):
         d.ensure_just_docker()
     host_port = get_next_free_port(8888)
     print("Starting notebookt at %i" % host_port)
+    nbextensions_not_activated = not check_if_nb_extensions_are_activated()
+    if not 'jupyter_contrib_nbextensions' in d.global_python_packages:
+        d.global_python_packages['jupyter_contrib_nbextensions'] = ''
 
     d.run(
-        "jupyter notebook --ip=0.0.0.0 --no-browser",
+        (
+        """
+        jupyter contrib nbextension install --user --symlink
+        jupyter nbextensions_configurator enable --user
+        """
+            if nbextensions_not_activated
+            else ""
+        )
+        + config.get('jupyter', {}).get('pre_run_inside','')
+        + """jupyter notebook --ip=0.0.0.0 --no-browser""",
         home_files=home_files,
         home_dirs=home_dirs,
         volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
@@ -217,12 +238,14 @@ def jupyter(no_build=False):
         ports=[(host_port, 8888)],
     )
 
+
 @main.command()
 def docker_tag():
     """return the currently used docker_tag 
     for integration purposes"""
     d, config = get_anysnake()
     print(d.docker_image)
+
 
 @main.command()
 @click.option("--no-build/--build", default=False)
@@ -250,7 +273,7 @@ def ssh(no_build=False):
         home_dirs.append(".vscode-remote")
     home_files.append(".ssh/authorized_keys")
 
-    tf = tempfile.NamedTemporaryFile(mode="w", suffix='.env')
+    tf = tempfile.NamedTemporaryFile(mode="w", suffix=".env")
     tf.write(
         "\n".join(
             [
@@ -265,6 +288,7 @@ def ssh(no_build=False):
     home_inside_docker = "/home/u%i" % os.getuid()
     volumes_ro[Path(tf.name)] = Path(home_inside_docker) / ".ssh/environment"
     import pprint
+
     pprint.pprint(volumes_ro)
     d.run(
         f"""

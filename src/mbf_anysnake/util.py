@@ -1,9 +1,13 @@
 # -*- coding: future_fstrings -*-
+import re
 import requests
+import subprocess
 import time
 import shutil
 import time
 from pathlib import Path
+
+re_github = r"[A-Za-z0-9-]+\/[A-Za-z0-9]+"
 
 
 def combine_volumes(ro=[], rw=[]):
@@ -92,3 +96,45 @@ def get_next_free_port(start_at):
         if port > start_at + 100:
             raise ValueError("No empty port found within search range")
     return port
+
+
+def clone_repo(url, name, target_path, log_file):
+    print(f"]\tCloning {name} to {target_path} from {url}")
+    if url.startswith("@"):
+        url = url[1:]
+    if re.match(re_github, url):
+        method = "git"
+        url = "https://github.com/" + url
+    elif url.startswith("git+"):
+        method = "git"
+        url = url[4:]
+    elif url.startswith("hg+"):
+        method = "hg"
+        url = url[3:]
+    else:
+        raise ValueError(
+            "Could not parse url / must be git+http(s) / hg+https, or github path"
+        )
+    if method == "git":
+        try:
+            subprocess.check_call(
+                ["git", "clone", url, str(target_path)],
+                stdout=log_file,
+                stderr=log_file,
+            )
+        except subprocess.CalledProcessError:
+            import shutil
+
+            shutil.rmtree(target_path)
+            raise
+    elif method == "hg":
+        try:
+            subprocess.check_call(
+                ["hg", "clone", url, str(target_path)], stdout=log_file, stderr=log_file
+            )
+        except subprocess.CalledProcessError:
+            import shutil
+
+            if target_path.exists():
+                shutil.rmtree(target_path)
+            raise

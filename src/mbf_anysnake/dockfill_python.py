@@ -7,7 +7,13 @@ import subprocess
 import packaging.version
 import pkg_resources
 from pathlib import Path
-from .util import combine_volumes, find_storage_path_from_other_machine, dict_to_toml
+from .util import (
+    combine_volumes,
+    find_storage_path_from_other_machine,
+    dict_to_toml,
+    clone_repo,
+    re_github,
+)
 import tomlkit
 
 
@@ -89,9 +95,6 @@ echo "done"
 
     def freeze(self):
         return {"base": {"python": self.python_version}}
-
-
-re_github = r"[A-Za-z0-9-]+\/[A-Za-z0-9]+"
 
 
 def safe_name(name):
@@ -227,7 +230,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 )
             ]
         )
-        
+
         return self.install_with_poetry(self.packages, code_packages, packages_missing)
 
     def clone_code_packages(self, code_packages):
@@ -240,49 +243,9 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             target_path = self.clone_path / name
             with open(str(self.paths[log_key + "_clone"]), "wb") as log_file:
                 if not target_path.exists():
-                    print("\tcloning", name, target_path)
                     result.add(name)
                     url = url_spec
-                    if url.startswith("@"):
-                        url = url[1:]
-                    if re.match(re_github, url):
-                        method = "git"
-                        url = "https://github.com/" + url
-                    elif url.startswith("git+"):
-                        method = "git"
-                        url = url[4:]
-                    elif url.startswith("hg+"):
-                        method = "hg"
-                        url = url[3:]
-                    else:
-                        raise ValueError(
-                            "Could not parse url / must be git+http(s) / hg+https, or github path"
-                        )
-                    if method == "git":
-                        try:
-                            subprocess.check_call(
-                                ["git", "clone", url, str(target_path)],
-                                stdout=log_file,
-                                stderr=log_file,
-                            )
-                        except subprocess.CalledProcessError:
-                            import shutil
-
-                            shutil.rmtree(target_path)
-                            raise
-                    elif method == "hg":
-                        try:
-                            subprocess.check_call(
-                                ["hg", "clone", url, str(target_path)],
-                                stdout=log_file,
-                                stderr=log_file,
-                            )
-                        except subprocess.CalledProcessError:
-                            import shutil
-
-                            if target_path.exists():
-                                shutil.rmtree(target_path)
-                            raise
+                    clone_repo(url, name, target_path, log_file)
 
         return result
 
@@ -441,7 +404,7 @@ class DockFill_GlobalVenv(_DockerFillVenv):
                 "storage_venv": (self.paths["storage"] / "venv" / self.python_version),
                 "docker_storage_venv": "/anysnake/storage_venv",
                 "storage_clones": self.paths["storage"] / "code",
-                "docker_storage_clones": "/anysnake/storage_clones",
+                "docker_storage_clones": "/anysnake/storage_venv_clones",
             }
         )
         self.target_path = self.paths["storage_venv"]
@@ -495,7 +458,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
         self.clone_path = self.paths["code_clones"]
         self.clone_path_inside_docker = self.paths["docker_code_clones"]
         self.dockfill_python = dockfill_python
-        self.volumes = {anysnake.paths[f"docker_code_venv"] : self.paths["code_venv"]}
+        self.volumes = {anysnake.paths[f"docker_code_venv"]: self.paths["code_venv"]}
         self.rw_volumes = {anysnake.paths[f"docker_code"]: self.paths["code"]}
         self.packages = self.anysnake.local_python_packages
         self.shell_path = str(Path(self.paths["docker_code_venv"]) / "bin")
