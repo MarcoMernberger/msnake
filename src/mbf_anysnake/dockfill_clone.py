@@ -26,17 +26,17 @@ class DockFill_Clone:
     def pprint(self):
         print("  Global cloned repos")
         for entry in self.anysnake.global_clones.items():
-            print(f"    {entry}")
+            print("    {}".format(entry))
         print("  Locally cloned repos")
         for entry in self.anysnake.local_clones.items():
-            print(f"    {entry}")
+            print("    {}".format(entry))
 
     def ensure(self):
         cloned = False
-        with open(self.paths["storage_clones"] / "log.txt", "w") as log_file:
+        with (self.paths["storage_clones"] / "log.txt").open("w") as log_file:
             for name, source in self.anysnake.global_clones.items():
                 cloned |= self.clone(name, source, self.paths["storage_clones"], log_file)
-        with open(self.paths["code_clones"] / "log.txt", "w") as log_file:
+        with (self.paths["code_clones"] / "log.txt").open("w") as log_file:
             for name, source in self.anysnake.local_clones.items():
                 cloned |= self.clone(name, source, self.paths["code_clones"], log_file)
         return cloned
