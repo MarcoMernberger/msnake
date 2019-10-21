@@ -93,10 +93,10 @@ def parsed_to_anysnake(parsed):
         bioconductor_version = base["bioconductor"]
     else:
         bioconductor_version = None
-    if "R" in base:
-        R_version = base["R"]
-    else:
-        R_version = None
+    R_version = base.get('R', None)
+    rpy2_version = base.get('rpy2_version', '3.2.0')
+
+
 
     if "storage_path" in base:
         storage_path = Path(base["storage_path"])
@@ -161,6 +161,7 @@ def parsed_to_anysnake(parsed):
         python_version=python_version,
         bioconductor_version=bioconductor_version,
         r_version=R_version,
+        rpy2_version=rpy2_version,
         global_python_packages=global_pip_packages,
         local_python_packages=local_pip_packages,
         bioconductor_whitelist=bioconductor_whitelist,

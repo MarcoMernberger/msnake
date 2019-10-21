@@ -80,6 +80,7 @@ class DockFill_Rpy2:
         self.paths = self.anysnake.paths
         self.python_version = self.anysnake.python_version
         self.R_version = self.anysnake.R_version
+        self.rpy2_version = self.anysnake.rpy2_version
         self.dockfill_python = dockfill_py
         self.dockfill_r = dockfill_r
 
@@ -88,7 +89,7 @@ class DockFill_Rpy2:
                 "storage_rpy2": (
                     find_storage_path_from_other_machine(
                         self.anysnake,
-                        Path("rpy2") / f"{self.python_version}_{self.R_version}_1",
+                        Path("rpy2") / f"{self.python_version}_{self.R_version}_{self.rpy2_version}",
                     )
                 ),
                 "docker_storage_rpy2": "/anysnake/rpy2",
@@ -119,6 +120,8 @@ class DockFill_Rpy2:
 
 export R_HOME={self.paths['docker_storage_r']}
 export PATH={self.paths['docker_storage_r']}/bin:$PATH
+# use the (hopefully more robust) API mode rpy2
+export RPY2_CFFI_MODE=API
 {self.paths['docker_storage_python']}/bin/virtualenv -p {self.paths['docker_storage_python']}/bin/python {self.paths['docker_storage_rpy2']}
 mkdir /tmp/rpy2
 cd /tmp/rpy2

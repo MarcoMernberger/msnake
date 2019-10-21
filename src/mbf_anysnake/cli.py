@@ -355,20 +355,27 @@ def default_config():
 # or just 'image' for auto_build from mbf_anysnake
 # docker specs
 docker_image="mbf_anysnake_18.04"
+
 # optional global config to import
-#global_config="/etc/anysnake.tompl"
+# global_config="/etc/anysnake.tompl"
+
 # python version to use
 python="3.7.2"
-#project_name = folder name of anysnake.toml by default, overwrite here
-#project_name="example"
 
-#bioconductor version to use, R version and CRAN dates are derived from this
+# project_name = folder name of anysnake.toml by default, overwrite here
+# project_name="example"
+
+# bioconductor version to use, R version and CRAN dates are derived from this
 # (optional) 
 bioconductor="3.8"
 
 # cran options are 'minimal' (just what's needed from bioconductor) and 'full'
 # (everything)
 cran="full"
+
+# rpy2 version to use.
+# rpy2_version = "3.2.0"
+
 
 # where to store the installations
 # python, R, global virtual enviromnments, bioconductor, cran
@@ -387,6 +394,7 @@ code_path="code"
 # rust = ["1.30.0", "nigthly-2019-03-20"]
 
 [run]
+# additional folders to map into docker
 additional_volumes_ro = [['/opt', '/opt']]
 additional_volumes_rw = [['/home/some_user/.hgrc', '/home/u1000/.hgrc']]
 pre_run_outside = \"""
@@ -399,14 +407,26 @@ pre_run_inside = \"""
 post_run_inside = "echo 'bash script running inside container after run cmd'"
 post_run_outside = "echo 'bash script running outside container after run cmd'"
 
+# python packages installed into global storage
 [global_python]
 jupyter=""
 
+# python packages installed locally
 [python]
 pandas=">=0.23"
 # an editable library
 dppd="@git+https://github.com/TyberiusPrime/dppd"
+# github integration
+dppd_plotine="@gh/TyberiusPrime/dppd"
 
+# additional @something urls for [python]
+# [pip_regexps]
+# @mbf/something ->
+# "@mbf/(.+)"="@hg+https://mysite.com/hg/\\1"
+# or just @mbf with 'smart' substitiution.
+# @mbf"=["@hg+https://mysite.com/hg/\\1"@
+
+# environmental variables inside the container
 [env]
 INSIDE_ANYSNAKE="yes"
 

@@ -46,6 +46,7 @@ class Anysnake:
         python_version,
         bioconductor_version,
         r_version,
+        rpy2_version,
         global_python_packages,
         local_python_packages,
         bioconductor_whitelist,
@@ -95,6 +96,7 @@ class Anysnake:
         self.global_python_packages = global_python_packages
         self.local_python_packages = local_python_packages
         self.bioconductor_whitelist = bioconductor_whitelist
+        self.rpy2_version = rpy2_version
         self.cran_mode = cran_mode
         self.post_build_cmd = post_build_cmd
         self.rust_versions = rust_versions
