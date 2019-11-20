@@ -86,7 +86,10 @@ class Anysnake:
             "docker_code": code_path_docker,
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
+            "per_user": Path("~").expanduser() / '.anysnake',
         }
+        self.paths['per_user'].mkdir(exist_ok=True)
+        self.uid = os.getuid()
 
         dfd = DockFill_Docker(self, docker_build_cmds)
         self.project_name = project_name

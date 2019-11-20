@@ -24,9 +24,10 @@ class DockFill_Rust:
                 # because rustup will place the binaries in the cargo/bin path
                 # but the cargo stuff needs to be per machine because 
                 # the downloads happen there.
-                "storage_rustup": self.paths['storage'] / 'rustup_home', 
+                "storage_rustup": self.paths['per_user'] / 'rustup_home', 
                 "docker_storage_rustup": Path("/anysnake/rustup_home"),
-                "storage_cargo": self.paths["storage"] / "rust_cargo",
+                #"storage_cargo": self.paths["storage"] / "rust_cargo",
+                "storage_cargo": self.paths["per_user"] / "rust_cargo",
                 "docker_storage_cargo": Path("/anysnake/cargo"),
                 "log_rust": (self.paths["log_storage"] / f"anysnake.rust.log"),
             }
@@ -62,15 +63,19 @@ class DockFill_Rust:
                 "CARGO_HOME": self.paths["docker_storage_cargo"],
             }
             cmd = f"""
-        sh $RUSTUP_HOME/rustup.sh -y --default-toolchain none
-        mkdir -p $RUSTUP_HOME/anysnake
+        sudo -E -u u{self.anysnake.uid} sh $RUSTUP_HOME/rustup.sh -y --default-toolchain none
+        sudo -E -u u{self.anysnake.uid} mkdir -p $RUSTUP_HOME/anysnake
         export PATH=$PATH:$CARGO_HOME/bin
         echo "rustup default {self.rust_versions[0]}"
-        rustup default {self.rust_versions[0]}
+        sudo -E -u u{self.anysnake.uid} $CARGO_HOME/bin/rustup default {self.rust_versions[0]}
             """
             for version in self.rust_versions:
                 if not version in installed_versions:
-                    cmd += f"rustup toolchain install {version} && cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
+                    if version.startswith('nightly'):
+                        force = '--force'
+                    else:
+                        force = ''
+                    cmd += f"sudo -E -u u{self.anysnake.uid} $CARGO_HOME/bin/rustup toolchain install {version} {force}&& $CARGO_HOME/bin/cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
             volumes = {
                 self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
                 self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
