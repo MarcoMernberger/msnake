@@ -21,6 +21,7 @@ class DockFill_Python:
     def __init__(self, anysnake):
         self.anysnake = anysnake
         self.python_version = self.anysnake.python_version
+
         self.paths = self.anysnake.paths
 
         self.paths.update(
@@ -196,10 +197,10 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 ),
             }
         )
-        self.poetry_path = self.clone_path / "poetry"
+        self.poetry_path = self.clone_path / f"poetry_{self.anysnake.python_version}"
         self.poetry_path.mkdir(exist_ok=True, parents=True)
         self.poetry_path_inside_docker = str(
-            Path(self.clone_path_inside_docker) / "poetry"
+            Path(self.clone_path_inside_docker) / f"poetry_{self.anysnake.python_version}"
         )
 
     def ensure(self):
@@ -323,6 +324,9 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
             old_toml = ""
         if new_toml != old_toml or packages_missing:
             print(f"poetry for {self.name} (slow, stand by)")
+            import difflib
+            for row in (difflib.context_diff(new_toml.split("\n"), old_toml.split("\n"))):
+                print(row)
             pyproject_toml.write_text(new_toml)
             cmd = [
                 f"source {self.target_path_inside_docker}/bin/activate",
