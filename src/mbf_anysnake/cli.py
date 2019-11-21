@@ -143,6 +143,7 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
             "sudo apt-get update;\nsudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`\n"
             + cmd
         )
+    d.mode = 'shell'
     print(
         d.run(
             cmd,
@@ -181,6 +182,7 @@ def run(cmd, no_build=False, pre=True, post=True):
     post_run_inside = config.get("run", {}).get("post_run_inside", False)
     if post and post_run_inside:
         cmd += post_run_inside
+    d.mode = 'run'
     print(
         d.run(
             cmd,
@@ -220,6 +222,7 @@ def jupyter(no_build=False):
     if not 'jupyter_contrib_nbextensions' in d.global_python_packages:
         d.global_python_packages['jupyter_contrib_nbextensions'] = ''
 
+    d.mode = 'jupyter'
     d.run(
         (
         """
@@ -492,6 +495,54 @@ def show_completion(shell, case_insensitive):
     )
     click.echo(click_completion.core.get_code(shell, extra_env=extra_env))
 
+@main.command()
+def enter():
+    """exec a fish shell in anysnake docker running from this folder. 
+    Will prompt if there are multiple available
+    """
+    import json
+    import sys
+    cwd = str(Path('.').absolute())
+    d, parsed = get_anysnake()
+    lines = subprocess.check_output(['docker','ps']).decode('utf-8').split("\n")
+    candidates = []
+    for l in lines:
+        if d.docker_image in l:
+            docker_id = l[:l.find(" ")]
+            info = json.loads(subprocess.check_output(['docker','inspect', docker_id]).decode('utf-8'))[0]
+            env = info.get('Config', {}).get('Env', {})
+            found = False
+            mode = '??'
+            for e in env:
+                e = e.split("=", 1)
+                if e[0] =="ANYSNAKE_PROJECT_PATH" and e[1] == cwd: 
+                    found = True
+                elif e[0] =="ANYSNAKE_MODE":
+                    mode = e[1]
+            if found:
+                #if mode in ('run','??', 'jupyter'):
+                candidates.append((docker_id,info.get('Name', '?'), mode))
+    if len(candidates) == 0:
+        print("No docker to enter found")
+        sys.exit(0)
+    elif len(candidates) == 1:
+        print("Entering only available docker")
+        pass
+    else:
+        print("Pick one")
+        for (ii, (docker_id, name, mode)) in enumerate(candidates):
+            print(ii, name, mode)
+        chosen = sys.stdin.readline().strip()
+        chosen = int(chosen)
+        candidates = [candidates[ii]]
+    if candidates:
+        print("Entering ", candidates[0][1])
+        cmd = ['docker', 'exec', '-it', candidates[0][0], 'fish']
+        p = subprocess.Popen(cmd)
+        p.communicate()
+        sys.exit(0)
+            
+    #print(d.docker_image)
 
 if __name__ == "__main__":
     main()

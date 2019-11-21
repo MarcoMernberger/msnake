@@ -162,6 +162,7 @@ class Anysnake:
             docker_image = docker_image[: docker_image.rfind(":")]
             docker_image += ":" + dfd.get_dockerfile_hash(docker_image)
         self.docker_image = str(docker_image)
+        self.mode = "unknown"
 
     def pprint(self):
         print("Anysnake")
@@ -216,6 +217,7 @@ class Anysnake:
             env[k] = self.environment_variables[k]
         env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
         env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
+        env["ANYSNAKE_MODE"] = self.mode
         return env
 
     def _build_cmd(
