@@ -217,7 +217,7 @@ def jupyter(no_build=False):
     else:
         d.ensure_just_docker()
     host_port = get_next_free_port(8888)
-    print("Starting notebookt at %i" % host_port)
+    print("Starting notebook at %i" % host_port)
     nbextensions_not_activated = not check_if_nb_extensions_are_activated()
     if not 'jupyter_contrib_nbextensions' in d.global_python_packages:
         d.global_python_packages['jupyter_contrib_nbextensions'] = ''
@@ -240,6 +240,34 @@ def jupyter(no_build=False):
         volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         ports=[(host_port, 8888)],
     )
+
+
+@main.command()
+@click.option("--no-build/--build", default=False)
+@click.argument('regexps', nargs=-1)
+def instant_browser(regexps, no_build=False):
+    """Run an instant_browser with everything mapped (build if necessary).
+
+
+    """
+    host_port = get_next_free_port(8888)
+    print("Starting instant_browser at %i" % host_port)
+    d, config = get_anysnake()
+    if not no_build:
+        d.ensure()
+    else:
+        d.ensure_just_docker()
+
+    d.mode = 'instant_browser'
+    d.run(
+        "instant_browser " + " ".join(regexps,),
+        home_files=home_files,
+        home_dirs=home_dirs,
+        volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
+        volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
+        ports=[(host_port, 8888)],
+    )
+
 
 
 @main.command()
