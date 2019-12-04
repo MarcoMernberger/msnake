@@ -18,6 +18,7 @@ duplicate_handling = {
     "cran": {
         "survival": "larger",
         "sivipm": "first",  # 1.1-3 and 1.1-4, but 1.1-4 has no tar.gz!
+        "mgcv": "larger",
         # "boot": "last",
     }
 }
@@ -91,6 +92,25 @@ blacklist_per_version = {
         "flipflop",  # won't compile
         "dSimer",  # won't compile
     },
+    "3.10": {
+        'tseries', # compilation problem - cfuncs.mod not found?
+        'frailtypack',# compilation problem - comon.mod not found?
+        'brainGraph', # summary.mediate is not exported by 'namespace:mediation'
+        'kerasR',   # needs installed python module?
+        'kmcudaR', # compilation issue?
+        'pbdSLAP', # I have no idea
+        'phateR',  # hardcoded python?
+        'PythonInR', # missing python.h? huh? python3|
+        'QuantLib', # missing header?
+        'RQuantLib', 
+        'mlm4omics', # boost error?
+        'MSGFplus', # who knows
+        'Rcwl', # missing cwltool
+        'laGP',  # compilation issue
+        'KoNLP', # compilation issue
+        'sdcMicro',  # can't download?
+        'Rmagic',  # can't download?
+       }
 }
 
 manual_dependencies = {  # because the cran annotation sometimes simply is wrong
@@ -209,7 +229,7 @@ def install_bioconductor():
 
     ppg.util.global_pipegraph.connect_graph()
     ppg.run_pipegraph()
-    for j in ppg.util.job_uniquifier.values():
+    for j in ppg.util.global_pipegraph.job_uniquifier.values():
         if j._pruned:
             print("pruned", j.job_id, "because of", j._pruned)
     write_done_sentinel(cran_mode, whitelist)
@@ -474,7 +494,7 @@ class RPackageInfo:
                     pprint.pprint(p1)
                     pprint.pprint(p2)
                     print("")
-                raise ValueError("Duplicate packages within one repository!")
+                raise ValueError("Duplicate packages within %s repository!"  %self.name)
 
             self._packages = pkgs
         return self._packages

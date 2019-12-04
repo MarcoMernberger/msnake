@@ -46,8 +46,12 @@ class DockFill_Bioconductor:
             }
         )
         self.volumes = {
-            self.paths[ "docker_storage_bioconductor" ]: self.paths["storage_bioconductor"],
-            self.paths[ "docker_storage_bioconductor_download" ]: self.paths["storage_bioconductor_download"],
+            self.paths["docker_storage_bioconductor"]: self.paths[
+                "storage_bioconductor"
+            ],
+            self.paths["docker_storage_bioconductor_download"]: self.paths[
+                "storage_bioconductor_download"
+            ],
         }
         self.env = {"R_LIBS_SITE": "/anysnake/bioconductor"}
 
@@ -71,55 +75,38 @@ class DockFill_Bioconductor:
             raise ValueError(
                 "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
             )
-        info = {}
-        for block in tbody.split("</tr>"):
-            bc_versions = re.findall(r"/packages/(\d+.\d+)/", block)
-            if bc_versions:
-                r_version = re.findall(r">(\d+\.\d+)</td>", block)
-                if len(r_version) != 1:
+        try:
+            info = {}  #  release -> {'date': , 'r_major_version':
+            for block in tbody.split("</tr>"):
+                if not block.strip():
+                    continue
+                if block.count("<td style") != 4:
+                    print(block.count("<td style") )
                     raise ValueError(
-                        "Failed to parse bioconductor -> R listing from website, check screen scrapping code"
+                        "Bioconductor relase page layout changed - update fetch_bioconductor_release_information() - too few elements?"
                     )
-                r_version = r_version[0]
-                for b in bc_versions:
-                    if b in info:
-                        raise ValueError(
-                            "Unexpected double information for bc relase %s? Check scraping code"
-                            % bc
-                        )
-                    info[b] = {"r_major_version": r_version}
+                tds = block.split("<td style")[1:]
+                bc_version = re.findall("\d+\.\d+", tds[0])[0]
+                release_date = tds[1][tds[1].find('">') + 2 :]
+                release_date = release_date[: release_date.find("<")]
+                package_count = re.findall(">(\d+)<", tds[2])[0]
+                r_version = re.findall(">(\d+\.\d+)<", tds[3])[0]
 
-        if not '"release-announcements"' in bc:
-            raise ValueError(
+                release_date = maya.parse(release_date)
+                release_date = release_date.rfc3339()
+                release_date = release_date[: release_date.find("T")]
+
+                info[bc_version] = {
+                    "date": release_date,
+                    "r_major_version": r_version,
+                    "pckg_count": int(package_count),
+                }
+        except:
+            print(
                 "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
             )
-        ra_offset = bc.find("release-announcements")
-        tbody = bc[bc.find("<tbody>", ra_offset) : bc.find("</tbody>", ra_offset)]
-        for block in tbody.split("</tr>"):
-            if not "href" in block:  # old relases no longer available
-                continue
-            release = re.findall(r">(\d+\.\d+)<", block)
-            if len(release) != 1:
-                raise ValueError(
-                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
-                )
-            pckg_count = re.findall(r">(\d+)<", block)
-            if len(pckg_count) != 1:
-                raise ValueError(
-                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
-                )
-            date = re.findall(r">([A-Z][a-z]+[0-9 ,]+)<", block)
-            if len(date) != 1:
-                raise ValueError(
-                    "Bioconductor relase page layout changed - update fetch_bioconductor_release_information()"
-                )
-            release = release[0]
-            pckg_count = pckg_count[0]
-            date = maya.parse(date[0])
-            date = date.rfc3339()
-            date = date[: date.find("T")]
-            info[release]["date"] = date
-            info[release]["pckg_count"] = pckg_count
+            raise
+
         return info
 
     @classmethod
@@ -208,8 +195,10 @@ class DockFill_Bioconductor:
             bash_script = f"""
 {self.paths['docker_storage_python']}/bin/virtualenv /tmp/venv
 source /tmp/venv/bin/activate
-pip install pypipegraph requests future-fstrings packaging numpy
-export PATH=$PATH:/anysnake/cargo/bin/cargo
+pip install pypipegraph requests==2.20.0 future-fstrings packaging numpy
+export PATH=$PATH:/anysnake/cargo/bin
+echo "cargo?"
+echo `which cargo`
 python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconductor.py
 """
             env = {"URL_%s" % k.upper(): v for (k, v) in urls.items()}
@@ -223,9 +212,15 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 self.paths["docker_storage_python"]: self.paths["storage_python"],
                 self.paths["docker_storage_venv"]: self.paths["storage_venv"],
                 self.paths["docker_storage_r"]: self.paths["storage_r"],
-                self.paths[ "docker_storage_bioconductor" ] / "_inside_dockfill_bioconductor.py": Path(__file__).parent / "_inside_dockfill_bioconductor.py",
-                self.paths[ "docker_storage_bioconductor_download" ]: self.paths["storage_bioconductor_download"],
-                self.paths[ "docker_storage_bioconductor" ]: self.paths["storage_bioconductor"],
+                self.paths["docker_storage_bioconductor"]
+                / "_inside_dockfill_bioconductor.py": Path(__file__).parent
+                / "_inside_dockfill_bioconductor.py",
+                self.paths["docker_storage_bioconductor_download"]: self.paths[
+                    "storage_bioconductor_download"
+                ],
+                self.paths["docker_storage_bioconductor"]: self.paths[
+                    "storage_bioconductor"
+                ],
                 self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
                 self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
             }
@@ -236,7 +231,7 @@ python  {self.paths['docker_storage_bioconductor']}/_inside_dockfill_bioconducto
                 "log_bioconductor",
                 root=True,
             )
-            if self.is_done(self.paths["storage_bioconductor"]):
+            if not self.is_done(self.paths["storage_bioconductor"]):
                 print(
                     f"bioconductor install failed, check {self.paths['log_bioconductor']}"
                 )
