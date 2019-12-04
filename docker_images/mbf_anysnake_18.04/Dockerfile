@@ -338,7 +338,8 @@ RUN chown u1001 /home/u1001 -R
 RUN chown u1002 /home/u1002 -R
 RUN chown u1003 /home/u1003 -R
 RUN chown u1004 /home/u1004 -R
-#RUN apt-get install -y 
+RUN apt-get update
+RUN apt-get install -y libgit2-dev libopencv-dev python3-dev pandoc
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
 RUN apt-get -y install ssh && mkdir /run/sshd
