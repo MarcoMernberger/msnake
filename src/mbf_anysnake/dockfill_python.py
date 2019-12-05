@@ -325,7 +325,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
         if new_toml != old_toml or packages_missing:
             print(f"poetry for {self.name} (slow, stand by)")
             import difflib
-            for row in (difflib.context_diff(new_toml.split("\n"), old_toml.split("\n"))):
+            for row in (difflib.context_diff(old_toml.split("\n") ,new_toml.split("\n"))):
                 print(row)
             pyproject_toml.write_text(new_toml)
             cmd = [
