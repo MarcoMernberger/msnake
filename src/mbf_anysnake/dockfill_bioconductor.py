@@ -43,6 +43,8 @@ class DockFill_Bioconductor:
                     self.paths["log_storage"]
                     / f"anysnake.bioconductor.{self.bioconductor_version}.todo.log"
                 ),
+                "project_bioconductor": self.paths['code'] / 'venv' / 'bioconductor'/ self.bioconductor_version,
+                "docker_project_bioconductor": Path('/project') / 'code' / 'venv' / 'bioconductor'/ self.bioconductor_version,
             }
         )
         self.volumes = {
@@ -53,7 +55,10 @@ class DockFill_Bioconductor:
                 "storage_bioconductor_download"
             ],
         }
-        self.env = {"R_LIBS_SITE": "/anysnake/bioconductor"}
+        self.env = {
+            "R_LIBS_SITE": "/anysnake/bioconductor",
+            "R_LIBS": self.paths['docker_project_bioconductor']
+        }
 
     def is_done(self, path):
         done_file = path / "done.sentinel"
@@ -81,7 +86,7 @@ class DockFill_Bioconductor:
                 if not block.strip():
                     continue
                 if block.count("<td style") != 4:
-                    print(block.count("<td style") )
+                    print(block.count("<td style"))
                     raise ValueError(
                         "Bioconductor relase page layout changed - update fetch_bioconductor_release_information() - too few elements?"
                     )
@@ -167,6 +172,7 @@ class DockFill_Bioconductor:
     def ensure(self):
         done_file = self.paths["storage_bioconductor"] / "done.sentinel"
         should = self.done_string
+        self.paths['project_bioconductor'].mkdir(exist_ok=True, parents=True)
         if not done_file.exists() or done_file.read_text() != should:
             info = self.bioconductor_relase_information(self.anysnake)
             # bioconductor can really only be reliably installed with the CRAN
