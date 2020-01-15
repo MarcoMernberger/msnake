@@ -222,6 +222,7 @@ def jupyter(no_build=False):
     if not 'jupyter_contrib_nbextensions' in d.global_python_packages:
         d.global_python_packages['jupyter_contrib_nbextensions'] = ''
 
+
     d.mode = 'jupyter'
     d.run(
         (
@@ -233,7 +234,8 @@ def jupyter(no_build=False):
             else ""
         )
         + config.get('jupyter', {}).get('pre_run_inside','')
-        + """jupyter notebook --ip=0.0.0.0 --no-browser""",
+        + """jupyter notebook --ip=0.0.0.0 --no-browser\n"""
+        + config.get('jupyter', {}).get('post_run_inside',''),
         home_files=home_files,
         home_dirs=home_dirs,
         volumes_ro=get_volumes_config(config, "additional_volumes_ro"),

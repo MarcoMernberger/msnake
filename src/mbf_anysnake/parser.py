@@ -153,7 +153,7 @@ def parsed_to_anysnake(parsed):
     global_clones = parsed.get("global_clones", {})
     local_clones = parsed.get("local_clones", {})
     check_pip_definitions(global_clones, additional_pip_lookup_res)
-    check_pip_definitions(global_clones, additional_pip_lookup_res)
+    check_pip_definitions(local_clones, additional_pip_lookup_res)
     
     return Anysnake(
         project_name=project_name,
