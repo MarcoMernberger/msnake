@@ -10,6 +10,7 @@ import subprocess
 import os
 import multiprocessing
 import sys
+import json
 
 from .dockfill_docker import DockFill_Docker
 from .dockfill_python import (
@@ -209,7 +210,7 @@ class Anysnake:
             if hasattr(s, "rebuild"):
                 s.rebuild()
 
-    def get_environment_variables(self, env_base):
+    def get_environment_variables(self, env_base, ports):
         env = env_base.copy()
         env = env.copy()
         for k in self.environment_variables.keys():
@@ -218,6 +219,7 @@ class Anysnake:
         env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
         env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
         env["ANYSNAKE_MODE"] = self.mode
+        env["ANYSNAKE_PORTS"] = json.dumps(ports)
         return env
 
     def _build_cmd(
@@ -235,7 +237,7 @@ class Anysnake:
         """
         ports is merged with those defined in the config/object creation
         """
-        env = self.get_environment_variables(env)
+        env = self.get_environment_variables(env, ports)
 
         # docker-py has no concept of interactive dockers
         # dockerpty does not work with current docker-py
