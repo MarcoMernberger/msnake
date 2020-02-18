@@ -49,7 +49,6 @@ Features
 
 
 
-
 Full configuration documentation:
 ==================================
 Configuration is in `toml format <https://github.com/toml-lang/toml>`_ in a file
@@ -103,6 +102,13 @@ Configuration for the run command
   container. cwd is /project
 - post_run_inside = "cmd.sh": run this after executing any run command - cwd is whatever run cmd left it at, inside continer
 - post_run_outside = "cmd.sh": run this after executing any run command - cwd is project dir, outside container
+
+
+[jupyter]
+- pre_run_inside = "cmd.sh": run this before executing jupyter - cwd is whatever run cmd left it at, inside continer
+- post_run_inside = "cmd.sh": run this after executing jupyter - cwd is whatever run cmd left it at, inside continer
+
+
 
 [global_run]
 ------------
@@ -159,6 +165,16 @@ will remove the installation block on it's prerequisites, which will in turn
 possibly allow the installation of other packages that dependend on those.
 
 You can also install every bioconductor package by specifiying ``_full_==''``
+
+
+Calling other docker containers
+================================
+If you wish, you may export `/var/run/docker.socket` as a RW volume into
+your anysnake docker. Then you can run docker containers in parallel to the
+anysnake ones by using some API that can talk 'docker-socket' - e.g. 
+https://pypi.org/project/docker/ .
+The default ubuntu 18.04 anysnake container has the users in the appropriate
+user group.
 
 
 Command line interface

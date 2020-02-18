@@ -478,29 +478,30 @@ class DockFill_CodeVenv(_DockerFillVenv):
         source_dir = self.paths["storage_venv"] / "bin"
         target_dir = self.paths["code_venv"] / "bin"
         for input_fn in source_dir.glob("*"):
-            output_fn = target_dir / input_fn.name
-            if not output_fn.exists():
-                input = input_fn.read_bytes()
-                if input.startswith(b"#"):
-                    n_pos = input.find(b"\n")
-                    first_line = input[:n_pos]
-                    if (
-                        first_line
-                        == f"#!{self.paths['docker_storage_venv']}/bin/python".encode(
-                            "utf-8"
-                        )
-                    ):
-                        output = (
-                            f"#!{self.paths['docker_code_venv']}/bin/python".encode(
+            if not input_fn.is_dir():
+                output_fn = target_dir / input_fn.name
+                if not output_fn.exists():
+                    input = input_fn.read_bytes()
+                    if input.startswith(b"#"):
+                        n_pos = input.find(b"\n")
+                        first_line = input[:n_pos]
+                        if (
+                            first_line
+                            == f"#!{self.paths['docker_storage_venv']}/bin/python".encode(
                                 "utf-8"
                             )
-                            + input[n_pos:]
-                        )
-                        output_fn.write_bytes(output)
-                else:
-                    output_fn.write_bytes(input)
-                output_fn.chmod(input_fn.stat().st_mode)
-        pth_path = (
+                        ):
+                            output = (
+                                f"#!{self.paths['docker_code_venv']}/bin/python".encode(
+                                    "utf-8"
+                                )
+                                + input[n_pos:]
+                            )
+                            output_fn.write_bytes(output)
+                    else:
+                        output_fn.write_bytes(input)
+                    output_fn.chmod(input_fn.stat().st_mode)
+            pth_path = (
             self.paths["code_venv"]
             / "lib"
             / ("python" + self.anysnake.major_python_version)
