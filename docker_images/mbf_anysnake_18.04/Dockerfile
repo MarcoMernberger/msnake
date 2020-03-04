@@ -10,6 +10,7 @@ RUN useradd --uid 1001 --gid 2000 --home=/home/u1001 --create-home -p "$1$gvr9dr
 RUN useradd --uid 1002 --gid 2000 --home=/home/u1002 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1002
 RUN useradd --uid 1003 --gid 2000 --home=/home/u1003 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1"--shell=/bin/bash u1003
 RUN useradd --uid 1004 --gid 2000 --home=/home/u1004 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1" --shell=/bin/bash u1004
+RUN useradd --uid 1018 --gid 2000 --home=/home/u1018 --create-home -p "$1$gvr9drEv$OT4HrhzzvU5HzBZ4yA.LR1" --shell=/bin/bash u1018
 RUN echo "root:test123" | chpasswd
 
 RUN apt-get update && apt-get install -y \
@@ -327,20 +328,23 @@ RUN echo "u1001:test123" | chpasswd
 RUN echo "u1002:test123" | chpasswd
 RUN echo "u1003:test123" | chpasswd
 RUN echo "u1004:test123" | chpasswd
+RUN echo "u1018:test123" | chpasswd
 RUN usermod -g sudo u1000
 RUN usermod -g sudo u1001
 RUN usermod -g sudo u1002
 RUN usermod -g sudo u1003
 RUN usermod -g sudo u1004
-RUN mkdir /home/u1000/.config /home/u1001/.config /home/u1002/.config /home/u1003/.config /home/u1004/.config
+RUN usermod -g sudo u1018
+RUN mkdir /home/u1000/.config /home/u1001/.config /home/u1002/.config /home/u1003/.config /home/u1004/.config /home/u1018/.config
 RUN chown u1000 /home/u1000 -R
 RUN chown u1001 /home/u1001 -R
 RUN chown u1002 /home/u1002 -R
 RUN chown u1003 /home/u1003 -R
 RUN chown u1004 /home/u1004 -R
+RUN chown u1018 /home/u1018 -R
 RUN apt-get update
 RUN apt-get install -y libgit2-dev libopencv-dev python3-dev pandoc pandoc-citeproc
 COPY sudoers /etc/sudoers
 RUN chmod 440 /etc/sudoers
 RUN apt-get -y install ssh && mkdir /run/sshd
-RUN groupadd -g 999 docker && usermod -a -G docker u1000 && usermod -a -G docker u1001 && usermod -a -G docker u1002 && usermod -a -G docker u1003 && usermod -a -G docker u1004
+RUN groupadd -g 999 docker && usermod -a -G docker u1000 && usermod -a -G docker u1001 && usermod -a -G docker u1002 && usermod -a -G docker u1003 && usermod -a -G docker u1004 && usermod -a -G docker u1018
