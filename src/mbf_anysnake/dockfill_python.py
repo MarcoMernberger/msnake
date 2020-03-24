@@ -348,7 +348,7 @@ class _DockerFillVenv(_Dockfill_Venv_Base):
                 env.update(self.anysnake.dockfill_rust.env)
             from .cli import home_files
 
-            home_inside_docker = "/home/u%i" % os.getuid()
+            home_inside_docker = self.anysnake.paths['home_inside_docker']
             for h in home_files:
                 p = Path("~").expanduser() / h
                 if p.exists():

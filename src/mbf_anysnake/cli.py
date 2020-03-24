@@ -318,8 +318,7 @@ def ssh(no_build=False):
     tf.flush()
 
     volumes_ro = get_volumes_config(config, "additional_volumes_ro")
-    home_inside_docker = "/home/u%i" % os.getuid()
-    volumes_ro[Path(tf.name)] = Path(home_inside_docker) / ".ssh/environment"
+    volumes_ro[Path(tf.name)] = Path(d.paths['home_inside_docker']) / ".ssh/environment"
     import pprint
 
     pprint.pprint(volumes_ro)

@@ -12,6 +12,7 @@ import multiprocessing
 import sys
 import json
 
+import mbf_anysnake
 from .dockfill_docker import DockFill_Docker
 from .dockfill_python import (
     DockFill_Python,
@@ -65,7 +66,7 @@ class Anysnake:
         ports=[],
         docker_build_cmds="",
         global_clones={},
-            local_clones={},
+        local_clones={},
     ):
         self.cores = cores if cores else multiprocessing.cpu_count()
         self.cran_mirror = cran_mirror
@@ -81,16 +82,19 @@ class Anysnake:
         code_path = Path(code_path).absolute()
         self.storage_per_hostname = bool(storage_per_hostname)
 
+        bin_path = Path(mbf_anysnake.__path__[0]).parent.parent / "bin"
+
         self.paths = {
+            "bin": bin_path,
             "storage": storage_path,
             "code": code_path,
             "docker_code": code_path_docker,
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
-            "per_user": Path("~").expanduser() / '.anysnake',
+            "per_user": Path("~").expanduser() / ".anysnake",
+            "home_inside_docker": "/home/%s" % self.get_login_username()
         }
-        self.paths['per_user'].mkdir(exist_ok=True)
-        self.uid = os.getuid()
+        self.paths["per_user"].mkdir(exist_ok=True)
 
         dfd = DockFill_Docker(self, docker_build_cmds)
         self.project_name = project_name
@@ -217,7 +221,7 @@ class Anysnake:
             # don't use update here - won't work with the toml object
             env[k] = self.environment_variables[k]
         env["ANYSNAKE_PROJECT_PATH"] = Path(".").absolute()
-        env["ANYSNAKE_USER"] = pwd.getpwuid(os.getuid())[0]
+        env["ANYSNAKE_USER"] = self.get_login_username()
         env["ANYSNAKE_MODE"] = self.mode
         env["ANYSNAKE_PORTS"] = json.dumps(ports)
         return env
@@ -251,14 +255,24 @@ class Anysnake:
             + ":$PATH"
         )
         tf.write(f"export PATH={path_str}\n")
+        tf.write(f"umask 0002\n") # allow sharing by default
         tf.write("source /anysnake/code_venv/bin/activate\n")
         tf.write(bash_script)
         print("bash script running inside:\n", bash_script)
         print("")
         tf.flush()
 
-        home_inside_docker = "/home/u%i" % os.getuid()
-        ro_volumes = [{"/anysnake/run.sh": tf.name}]
+        home_inside_docker = self.paths['home_inside_docker']
+        ro_volumes = [
+            {
+                "/anysnake/run.sh": tf.name,
+                "/etc/passwd": "/etc/passwd",  # the users inside are the users outside
+                "/etc/group": "/etc/group",
+                # "/etc/shadow": "/etc/shadow",
+                "/anysnake/gosu": str(self.paths["bin"] / "gosu-amd64"),
+            }
+        ]
+        print(ro_volumes)
         rw_volumes = [{"/project": os.path.abspath(".")}]
         for h in home_files:
             p = Path("~").expanduser() / h
@@ -287,7 +301,9 @@ class Anysnake:
         rw_volumes.append(volumes_rw)
         volumes = combine_volumes(ro=ro_volumes, rw=rw_volumes)
         cmd = ["docker", "run", "-it", "--rm"]
-        for inside_path, (outside_path, mode) in sorted(volumes.items(), key = lambda x: str(x[1])):
+        for inside_path, (outside_path, mode) in sorted(
+            volumes.items(), key=lambda x: str(x[1])
+        ):
             if Path(outside_path).exists():
                 cmd.append("-v")
                 cmd.append("%s:%s:%s" % (outside_path, inside_path, mode))
@@ -296,8 +312,6 @@ class Anysnake:
         for key, value in sorted(env.items()):
             cmd.append("-e")
             cmd.append("%s=%s" % (key, value))
-        cmd.append("-u")
-        cmd.append("u%i" % os.getuid())
         if py_spy_support:
             cmd.extend(
                 [  # py-spy suppor"/home/u%i" % os.getuid()t
@@ -316,7 +330,15 @@ class Anysnake:
 
         cmd.extend(["--workdir", "/project"])
         cmd.append("--network=bridge")
-        cmd.extend([self.docker_image, "/bin/bash", "/anysnake/run.sh"])
+        cmd.extend(
+            [
+                self.docker_image,
+                "/anysnake/gosu",
+                self.get_login_username(),
+                "/bin/bash",
+                "/anysnake/run.sh",
+            ]
+        )
         last_was_dash = True
         print("docker cmd")
         for x in cmd:
@@ -348,7 +370,16 @@ class Anysnake:
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
-        volumes = {"/anysnake/run.sh" : tf.name }
+        volumes = {
+            "/anysnake/run.sh": tf.name,
+            "/etc/passwd": (
+                "/etc/passwd",
+                "ro",
+            ),  # the users inside are the users outside
+            "/etc/group": ("/etc/group", "ro"),
+            # "/etc/shadow": ("/etc/shadow", 'ro'),
+            "/anysnake/gosu": str(self.paths["bin"] / "gosu-amd64"),
+        }
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
         for k, v in volumes.items():
@@ -359,14 +390,25 @@ class Anysnake:
                 volume_args[str(v)] = {"bind": k, "mode": "rw"}
         run_kwargs["volumes"] = volume_args
         # print(run_kwargs["volumes"])
-        if not root and not "user" in run_kwargs:
-            run_kwargs["user"] = "%i:%i" % (os.getuid(), os.getgid())
+        # if not root and not "user" in run_kwargs:
+        # run_kwargs["user"] = "%s:%i" % (self.get_login_username(), os.getgid())
+        tf.write(f"umask 0002\n") # allow sharing by default
         tf.write(bash_script)
         tf.flush()
         container = client.containers.create(
-            docker_image, 
-            "/bin/bash /anysnake/run.sh", 
-            **run_kwargs
+            docker_image,
+            (
+                ["/bin/bash", "/anysnake/run.sh"]
+                if root
+                else [
+                    "/anysnake/gosu",
+                    self.get_login_username(),
+                    "/bin/bash",
+                    "/anysnake/run.sh",
+                    ]
+
+            ),
+            **run_kwargs,
         )
         container_result = b""
         try:
@@ -416,7 +458,7 @@ class Anysnake:
             if build_dir.exists():
                 shutil.rmtree(str(build_dir))
             build_dir.mkdir(parents=True)
-            volumes = {target_dir_inside_docker : build_dir}
+            volumes = {target_dir_inside_docker: build_dir}
             if additional_volumes:
                 volumes.update(additional_volumes)
             container_result = self._run_docker(
@@ -474,3 +516,7 @@ class Anysnake:
             else:
                 entry["method"] = "pip"
         return parsed_packages
+
+
+    def get_login_username(self):
+        return pwd.getpwuid(os.getuid())[0]

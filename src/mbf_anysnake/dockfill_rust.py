@@ -63,11 +63,11 @@ class DockFill_Rust:
                 "CARGO_HOME": self.paths["docker_storage_cargo"],
             }
             cmd = f"""
-        sudo -E -u u{self.anysnake.uid} sh $RUSTUP_HOME/rustup.sh -y --default-toolchain none
-        sudo -E -u u{self.anysnake.uid} mkdir -p $RUSTUP_HOME/anysnake
+        sudo -E -u {self.anysnake.get_login_username()} sh $RUSTUP_HOME/rustup.sh -y --default-toolchain none
+        sudo -E -u {self.anysnake.get_login_username()} mkdir -p $RUSTUP_HOME/anysnake
         export PATH=$PATH:$CARGO_HOME/bin
         echo "rustup default {self.rust_versions[0]}"
-        sudo -E -u u{self.anysnake.uid} $CARGO_HOME/bin/rustup default {self.rust_versions[0]}
+        sudo -E -u {self.anysnake.get_login_username()} $CARGO_HOME/bin/rustup default {self.rust_versions[0]}
             """
             for version in self.rust_versions:
                 if not version in installed_versions:
@@ -75,7 +75,7 @@ class DockFill_Rust:
                         force = '--force'
                     else:
                         force = ''
-                    cmd += f"sudo -E -u u{self.anysnake.uid} $CARGO_HOME/bin/rustup toolchain install {version} {force}&& $CARGO_HOME/bin/cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
+                    cmd += f"sudo -E -u {self.anysnake.get_login_username()} $CARGO_HOME/bin/rustup toolchain install {version} {force}&& $CARGO_HOME/bin/cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
             volumes = {
                 self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
                 self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
