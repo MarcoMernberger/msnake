@@ -501,7 +501,7 @@ class DockFill_CodeVenv(_DockerFillVenv):
                     else:
                         output_fn.write_bytes(input)
                     output_fn.chmod(input_fn.stat().st_mode)
-            pth_path = (
+        pth_path = (
             self.paths["code_venv"]
             / "lib"
             / ("python" + self.anysnake.major_python_version)
