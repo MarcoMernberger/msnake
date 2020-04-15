@@ -143,7 +143,7 @@ def shell(no_build=False, allow_writes=False, include_perf=False):
             "sudo apt-get update;\nsudo apt-get install -y linux-tools-common linux-tools-generic linux-tools-`uname -r`\n"
             + cmd
         )
-    d.mode = 'shell'
+    d.mode = "shell"
     print(
         d.run(
             cmd,
@@ -166,6 +166,9 @@ def run(cmd, no_build=False, pre=True, post=True):
     import subprocess
 
     d, config = get_anysnake()
+    print(d)
+    print("------------")
+    print(d.docker_image)
     if not no_build:
         d.ensure()
     else:
@@ -182,7 +185,9 @@ def run(cmd, no_build=False, pre=True, post=True):
     post_run_inside = config.get("run", {}).get("post_run_inside", False)
     if post and post_run_inside:
         cmd += post_run_inside
-    d.mode = 'run'
+    d.mode = "run"
+    print(cmd)
+    print("------------------")
     print(
         d.run(
             cmd,
@@ -219,23 +224,22 @@ def jupyter(no_build=False):
     host_port = get_next_free_port(8888)
     print("Starting notebook at %i" % host_port)
     nbextensions_not_activated = not check_if_nb_extensions_are_activated()
-    if not 'jupyter_contrib_nbextensions' in d.global_python_packages:
-        d.global_python_packages['jupyter_contrib_nbextensions'] = ''
+    if not "jupyter_contrib_nbextensions" in d.global_python_packages:
+        d.global_python_packages["jupyter_contrib_nbextensions"] = ""
 
-
-    d.mode = 'jupyter'
+    d.mode = "jupyter"
     d.run(
         (
-        """
+            """
         jupyter contrib nbextension install --user --symlink
         jupyter nbextensions_configurator enable --user
         """
             if nbextensions_not_activated
             else ""
         )
-        + config.get('jupyter', {}).get('pre_run_inside','')
+        + config.get("jupyter", {}).get("pre_run_inside", "")
         + """jupyter notebook --ip=0.0.0.0 --no-browser\n"""
-        + config.get('jupyter', {}).get('post_run_inside',''),
+        + config.get("jupyter", {}).get("post_run_inside", ""),
         home_files=home_files,
         home_dirs=home_dirs,
         volumes_ro=get_volumes_config(config, "additional_volumes_ro"),
@@ -246,7 +250,7 @@ def jupyter(no_build=False):
 
 @main.command()
 @click.option("--no-build/--build", default=False)
-@click.argument('regexps', nargs=-1)
+@click.argument("regexps", nargs=-1)
 def instant_browser(regexps, no_build=False):
     """Run an instant_browser with everything mapped (build if necessary).
 
@@ -260,7 +264,7 @@ def instant_browser(regexps, no_build=False):
     else:
         d.ensure_just_docker()
 
-    d.mode = 'instant_browser'
+    d.mode = "instant_browser"
     d.run(
         "instant_browser " + " ".join(regexps,),
         home_files=home_files,
@@ -269,7 +273,6 @@ def instant_browser(regexps, no_build=False):
         volumes_rw=get_volumes_config(config, "additional_volumes_rw"),
         ports=[(host_port, 8888)],
     )
-
 
 
 @main.command()
@@ -318,7 +321,7 @@ def ssh(no_build=False):
     tf.flush()
 
     volumes_ro = get_volumes_config(config, "additional_volumes_ro")
-    volumes_ro[Path(tf.name)] = Path(d.paths['home_inside_docker']) / ".ssh/environment"
+    volumes_ro[Path(tf.name)] = Path(d.paths["home_inside_docker"]) / ".ssh/environment"
     import pprint
 
     pprint.pprint(volumes_ro)
@@ -524,6 +527,7 @@ def show_completion(shell, case_insensitive):
     )
     click.echo(click_completion.core.get_code(shell, extra_env=extra_env))
 
+
 @main.command()
 def enter():
     """exec a fish shell in anysnake docker running from this folder. 
@@ -531,26 +535,31 @@ def enter():
     """
     import json
     import sys
-    cwd = str(Path('.').absolute())
+
+    cwd = str(Path(".").absolute())
     d, parsed = get_anysnake()
-    lines = subprocess.check_output(['docker','ps']).decode('utf-8').split("\n")
+    lines = subprocess.check_output(["docker", "ps"]).decode("utf-8").split("\n")
     candidates = []
     for l in lines:
         if d.docker_image in l:
-            docker_id = l[:l.find(" ")]
-            info = json.loads(subprocess.check_output(['docker','inspect', docker_id]).decode('utf-8'))[0]
-            env = info.get('Config', {}).get('Env', {})
+            docker_id = l[: l.find(" ")]
+            info = json.loads(
+                subprocess.check_output(["docker", "inspect", docker_id]).decode(
+                    "utf-8"
+                )
+            )[0]
+            env = info.get("Config", {}).get("Env", {})
             found = False
-            mode = '??'
+            mode = "??"
             for e in env:
                 e = e.split("=", 1)
-                if e[0] =="ANYSNAKE_PROJECT_PATH" and e[1] == cwd: 
+                if e[0] == "ANYSNAKE_PROJECT_PATH" and e[1] == cwd:
                     found = True
-                elif e[0] =="ANYSNAKE_MODE":
+                elif e[0] == "ANYSNAKE_MODE":
                     mode = e[1]
             if found:
-                #if mode in ('run','??', 'jupyter'):
-                candidates.append((docker_id,info.get('Name', '?'), mode))
+                # if mode in ('run','??', 'jupyter'):
+                candidates.append((docker_id, info.get("Name", "?"), mode))
     if len(candidates) == 0:
         print("No docker to enter found")
         sys.exit(0)
@@ -566,12 +575,13 @@ def enter():
         candidates = [candidates[ii]]
     if candidates:
         print("Entering ", candidates[0][1])
-        cmd = ['docker', 'exec', '-it', candidates[0][0], 'fish']
+        cmd = ["docker", "exec", "-it", candidates[0][0], "fish"]
         p = subprocess.Popen(cmd)
         p.communicate()
         sys.exit(0)
-            
-    #print(d.docker_image)
+
+    # print(d.docker_image)
+
 
 if __name__ == "__main__":
     main()

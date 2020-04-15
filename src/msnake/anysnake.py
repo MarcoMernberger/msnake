@@ -92,7 +92,7 @@ class Anysnake:
             "log_storage": storage_path / "logs",
             "log_code": code_path / "logs",
             "per_user": Path("~").expanduser() / ".anysnake",
-            "home_inside_docker": "/home/%s" % self.get_login_username()
+            "home_inside_docker": "/home/%s" % self.get_login_username(),
         }
         self.paths["per_user"].mkdir(exist_ok=True)
 
@@ -125,14 +125,14 @@ class Anysnake:
         self.strategies = [
             x
             for x in [
-                dfd,
-                self.dockfill_rust,
-                dfp,
-                Dockfill_PythonPoetry(self, dfp),
-                DockFill_CodeVenv(
-                    self, dfp, dfgv
-                ),  # since I want them earlier in the path!
-                dfgv,
+                dfd,  # first create/ensure the basic docker image --> run
+                self.dockfill_rust,  # then comes rust, this creates a container via _run_docker --> that just installs rust outside the container
+                # dfp,  # this calls anysnake.build ... ehich also calls _run_docker
+                # Dockfill_PythonPoetry(self, dfp),
+                # DockFill_CodeVenv(
+                #    self, dfp, dfgv
+                # ),  # since I want them earlier in the path!
+                # dfgv,
             ]
             if x is not None
         ]
@@ -190,11 +190,16 @@ class Anysnake:
         self.paths["log_code"].mkdir(parents=False, exist_ok=True)
 
         run_post_build = False
+        print(self.strategies)
         for s in self.strategies:
+            print("=======================")
+            print(s)
+            print("=======================")
             start = time.time()
             run_post_build |= s.ensure()
             if do_time:
                 print(s.__class__.__name__, time.time() - start)
+        raise ValueError()
         if run_post_build and self.post_build_cmd:
             import subprocess
 
@@ -255,14 +260,14 @@ class Anysnake:
             + ":$PATH"
         )
         tf.write(f"export PATH={path_str}\n")
-        tf.write(f"umask 0002\n") # allow sharing by default
-        tf.write("source /anysnake/code_venv/bin/activate\n")
+        tf.write(f"umask 0002\n")  # allow sharing by default
+        # tf.write("source /anysnake/code_venv/bin/activate\n")
         tf.write(bash_script)
         print("bash script running inside:\n", bash_script)
         print("")
         tf.flush()
 
-        home_inside_docker = self.paths['home_inside_docker']
+        home_inside_docker = self.paths["home_inside_docker"]
         ro_volumes = [
             {
                 "/anysnake/run.sh": tf.name,
@@ -273,25 +278,27 @@ class Anysnake:
             }
         ]
         print(ro_volumes)
-        rw_volumes = [{"/project": os.path.abspath("."),
-            Path("~").expanduser() : self.paths['home_inside_docker']
+        rw_volumes = [
+            {
+                "/project": os.path.abspath("."),
+                Path("~").expanduser(): self.paths["home_inside_docker"],
             }
         ]
-        #for h in home_files:
-            #p = Path("~").expanduser() / h
-            #if p.exists():
-                # if p.is_dir():
-                # rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
-                # else:
-                #target = str(Path(home_inside_docker) / h)
-                #ro_volumes[0][target] = str(p)
-        #for h in home_dirs:
-            #p = Path("~").expanduser() / h
-            #if p.exists() and not p.is_dir():
-                #raise ValueError(f"Expected {p} to be a directory")
-            #p.mkdir(exist_ok=True, parents=True)
-            #target = str(Path(home_inside_docker) / h)
-            #rw_volumes[0][target] = str(p)
+        # for h in home_files:
+        # p = Path("~").expanduser() / h
+        # if p.exists():
+        # if p.is_dir():
+        # rw_volumes[0][str(p)] = str(Path(home_inside_docker) / h)
+        # else:
+        # target = str(Path(home_inside_docker) / h)
+        # ro_volumes[0][target] = str(p)
+        # for h in home_dirs:
+        # p = Path("~").expanduser() / h
+        # if p.exists() and not p.is_dir():
+        # raise ValueError(f"Expected {p} to be a directory")
+        # p.mkdir(exist_ok=True, parents=True)
+        # target = str(Path(home_inside_docker) / h)
+        # rw_volumes[0][target] = str(p)
 
         if allow_writes:
             rw_volumes.extend([df.volumes for df in self.strategies])
@@ -370,6 +377,9 @@ class Anysnake:
     def _run_docker(
         self, bash_script, run_kwargs, log_name, root=False, append_to_log=False
     ):
+        print("_______run_docker_________")
+        print(bash_script)
+        print(run_kwargs)
         docker_image = self.docker_image
         client = docker_from_env()
         tf = tempfile.NamedTemporaryFile(mode="w")
@@ -380,9 +390,9 @@ class Anysnake:
                 "ro",
             ),  # the users inside are the users outside
             "/etc/group": ("/etc/group", "ro"),
-            # "/etc/shadow": ("/etc/shadow", 'ro'),
+            "/etc/shadow": ("/etc/shadow", "ro"),
             "/anysnake/gosu": str(self.paths["bin"] / "gosu-amd64"),
-            Path("~").expanduser() : self.paths['home_inside_docker']
+            Path("~").expanduser(): self.paths["home_inside_docker"],
         }
         volumes.update(run_kwargs["volumes"])
         volume_args = {}
@@ -396,9 +406,16 @@ class Anysnake:
         # print(run_kwargs["volumes"])
         # if not root and not "user" in run_kwargs:
         # run_kwargs["user"] = "%s:%i" % (self.get_login_username(), os.getgid())
-        tf.write(f"umask 0002\n") # allow sharing by default
+        tf.write(f"umask 0002\n")  # allow sharing by default
         tf.write(bash_script)
         tf.flush()
+        print("-------image----------")
+        print(docker_image)
+        print("-------paths----------")
+        print(self.paths)
+        print("-------cmd script----------")
+        print(bash_script)
+        print(self.get_login_username())
         container = client.containers.create(
             docker_image,
             (
@@ -409,8 +426,7 @@ class Anysnake:
                     self.get_login_username(),
                     "/bin/bash",
                     "/anysnake/run.sh",
-                    ]
-
+                ]
             ),
             **run_kwargs,
         )
@@ -435,6 +451,7 @@ class Anysnake:
                     op.write(container_result)
             else:
                 self.paths[log_name].write_bytes(container_result)
+        print(return_code, container_result)
         return return_code, container_result
 
     def build(
@@ -454,6 +471,7 @@ class Anysnake:
         returns True if it was build, False if it was already present
         """
         target_dir = target_dir.absolute()
+        print(target_dir)
         if not target_dir.exists():
             if version_check is not None:
                 version_check()
@@ -465,6 +483,12 @@ class Anysnake:
             volumes = {target_dir_inside_docker: build_dir}
             if additional_volumes:
                 volumes.update(additional_volumes)
+            print(target_dir)
+            print(build_cmds)
+            print(volumes)
+            print(environment)
+            print(log_name)
+            print(root)
             container_result = self._run_docker(
                 build_cmds,
                 {"volumes": volumes, "environment": environment},
@@ -520,7 +544,6 @@ class Anysnake:
             else:
                 entry["method"] = "pip"
         return parsed_packages
-
 
     def get_login_username(self):
         return pwd.getpwuid(os.getuid())[0]

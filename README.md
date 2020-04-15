@@ -1,7 +1,7 @@
-# mbf_anysnake
+# msnake
 |               |                                                                             |
 |---------------|-----------------------------------------------------------------------------|
-| Documentation | https://mbf_anysnake.readthedocs.io/en/latest/                              |
+| Documentation | https://msnake.readthedocs.io/en/latest/                              |
 
 Version controlled, per project Python, Python packages, R, Bioconductor and CRAN,
 all inside a Docker container.
@@ -62,4 +62,4 @@ Motivations in brief:
 
 
 
-mbf_anysnake follows [semver](https://semver.org)
+msnake follows [semver](https://semver.org)

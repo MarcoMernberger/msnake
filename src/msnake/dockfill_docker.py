@@ -36,12 +36,10 @@ class DockFill_Docker:
 
     def get_dockerfile_text(self, docker_image_name):
         b = (
-                self.paths["docker_image_build_scripts"]
-                / docker_image_name
-                / "Dockerfile"
-            ).read_text()
+            self.paths["docker_image_build_scripts"] / docker_image_name / "Dockerfile"
+        ).read_text()
         for s in self.anysnake.strategies:
-            if hasattr(s, 'get_additional_docker_build_cmds'):
+            if hasattr(s, "get_additional_docker_build_cmds"):
                 b += s.get_additional_docker_build_cmds()
         b += "\n" + self.docker_build_cmds + "\n"
         return b
@@ -50,23 +48,36 @@ class DockFill_Docker:
         """Build (or pull) the docker container if it's not present in the system.
         pull only happens if we don't have a build script
         """
+        # This checks if the docker image is already present ... if so, no need to do anything
+        # if not it divines the docker image name and checks ckecks if a build script is already present. If so it reads a preexisting template dockerfile and runs it
+        # if not, it tries to pull the image from docker hub ...
+        # I assume the Dockerfile template was done by hand
         client = docker.from_env()
         tags_available = set()
         for img in client.images.list():
+            print(img)
             tags_available.update(img.tags)
         if self.anysnake.docker_image in tags_available:
             pass
         else:
-            docker_image = self.anysnake.docker_image[: self.anysnake.docker_image.rfind(":")]
-            bs = (
-                self.paths["docker_image_build_scripts"]
-                / docker_image
-                / "build.sh"
+            docker_image = self.anysnake.docker_image[
+                : self.anysnake.docker_image.rfind(":")
+            ]
+            print(docker_image)
+            bs = self.paths["docker_image_build_scripts"] / docker_image / "build.sh"
+            print(bs)
+            print(self.anysnake.docker_image)
+            print(
+                self.paths["docker_image_build_scripts"] / docker_image / "Dockerfile"
             )
+            print("---Dockerfile content---")
+            print(self.get_dockerfile_text(docker_image))
+            # raise ValueError()
+
             if bs.exists():
                 with tempfile.TemporaryDirectory() as td:
                     copytree(str(bs.parent), td)
-                    df = Path(td) / 'Dockerfile'
+                    df = Path(td) / "Dockerfile"
                     df.write_text(self.get_dockerfile_text(docker_image))
                     print("having to call", bs)
                     print(os.listdir(td))
@@ -84,9 +95,7 @@ class DockFill_Docker:
 
         dockerfile = ()
         hash = hashlib.md5()
-        hash.update(
-            self.get_dockerfile_text(docker_image_name).encode('utf-8')
-        )
+        hash.update(self.get_dockerfile_text(docker_image_name).encode("utf-8"))
         hash.update(
             (
                 self.paths["docker_image_build_scripts"] / docker_image_name / "sudoers"

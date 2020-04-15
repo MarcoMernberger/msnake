@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 0.3
+===========
+- adapted mbf_anysnake for general usage
+
 Version 0.2
 ===========
 - reworked python 'editble' installs to work around a recent pip limitation involving pep517 packages and editable installs

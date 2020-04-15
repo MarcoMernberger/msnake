@@ -22,12 +22,13 @@ class DockFill_Rust:
             {
                 # this does not use the find_storage_path_from_other_machine
                 # because rustup will place the binaries in the cargo/bin path
-                # but the cargo stuff needs to be per machine because 
+                # but the cargo stuff needs to be per machine because
                 # the downloads happen there.
-                "storage_rustup": self.paths['per_user'] / 'rustup_home', 
+                # "storage_rustup": self.paths["per_user"] / "rustup_home",
+                "storage_rustup": self.paths["storage"] / "rustup_home",
                 "docker_storage_rustup": Path("/anysnake/rustup_home"),
-                #"storage_cargo": self.paths["storage"] / "rust_cargo",
-                "storage_cargo": self.paths["per_user"] / "rust_cargo",
+                "storage_cargo": self.paths["storage"] / "rust_cargo",
+                # "storage_cargo": self.paths["per_user"] / "rust_cargo",
                 "docker_storage_cargo": Path("/anysnake/cargo"),
                 "log_rust": (self.paths["log_storage"] / f"anysnake.rust.log"),
             }
@@ -53,6 +54,11 @@ class DockFill_Rust:
         self.paths["storage_cargo"].mkdir(exist_ok=True)
         installed_versions = self.get_installed_rust_versions()
         missing = set(self.rust_versions).difference(installed_versions)
+        print(missing)
+        print(self.rust_versions, installed_versions)
+        print(self.paths["storage_rustup"])
+        print(True if missing else False)
+        # raise ValueError()
         if missing:
             print("installing rust versions ", missing)
             download_file(
@@ -71,15 +77,16 @@ class DockFill_Rust:
             """
             for version in self.rust_versions:
                 if not version in installed_versions:
-                    if version.startswith('nightly'):
-                        force = '--force'
+                    if version.startswith("nightly"):
+                        force = "--force"
                     else:
-                        force = ''
+                        force = ""
                     cmd += f"sudo -E -u {self.anysnake.get_login_username()} $CARGO_HOME/bin/rustup toolchain install {version} {force}&& $CARGO_HOME/bin/cargo && touch $RUSTUP_HOME/anysnake/{version}.done\n"
             volumes = {
                 self.paths["docker_storage_rustup"]: self.paths["storage_rustup"],
                 self.paths["docker_storage_cargo"]: self.paths["storage_cargo"],
             }
+            raise ValueError()
             self.anysnake._run_docker(
                 cmd, {"volumes": volumes, "environment": env}, "log_rust", root=True
             )
